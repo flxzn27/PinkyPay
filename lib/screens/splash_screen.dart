@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // Import Supabase
 import '../config/colors.dart';
 import 'dashboard_screen.dart';
+import 'auth/login_screen.dart'; // Import Login Screen
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -19,7 +21,7 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: Duration(seconds: 2),
+      duration: const Duration(seconds: 2),
       vsync: this,
     );
 
@@ -33,12 +35,33 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    Future.delayed(Duration(seconds: 3), () {
+    // LOGIKA PINDAH HALAMAN
+    _checkAuthAndNavigate();
+  }
+
+  // Fungsi Cek Login
+  Future<void> _checkAuthAndNavigate() async {
+    // Tunggu minimal 3 detik biar logo kelihatan (branding)
+    await Future.delayed(const Duration(seconds: 3));
+
+    if (!mounted) return;
+
+    // Cek sesi Supabase
+    final session = Supabase.instance.client.auth.currentSession;
+
+    if (session != null) {
+      // User SUDAH login -> Ke Dashboard
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => DashboardScreen()),
+        MaterialPageRoute(builder: (context) => const DashboardScreen()),
       );
-    });
+    } else {
+      // User BELUM login -> Ke Login Screen
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    }
   }
 
   @override
@@ -51,7 +74,7 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -72,7 +95,6 @@ class _SplashScreenState extends State<SplashScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Logo placeholder - ganti dengan logo kamu
                       Container(
                         width: 120,
                         height: 120,
@@ -83,18 +105,18 @@ class _SplashScreenState extends State<SplashScreen>
                             BoxShadow(
                               color: Colors.black.withOpacity(0.2),
                               blurRadius: 20,
-                              offset: Offset(0, 10),
+                              offset: const Offset(0, 10),
                             ),
                           ],
                         ),
-                        child: Icon(
+                        child: const Icon(
                           Icons.wallet,
                           size: 60,
                           color: AppColors.primaryPink,
                         ),
                       ),
-                      SizedBox(height: 24),
-                      Text(
+                      const SizedBox(height: 24),
+                      const Text(
                         'Pinky Pay',
                         style: TextStyle(
                           fontSize: 36,
@@ -103,7 +125,7 @@ class _SplashScreenState extends State<SplashScreen>
                           letterSpacing: 1.2,
                         ),
                       ),
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       Text(
                         'Your Smart E-Wallet',
                         style: TextStyle(
