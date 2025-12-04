@@ -1,4 +1,4 @@
-name: pinkypay
+name: PinkyPay 
 description: "A new Flutter project."
 publish_to: 'none'
 
@@ -20,9 +20,17 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_native_splash: ^2.3.1
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
     - assets/icons/
+
+flutter_native_splash:
+  color: "#FF00B7" 
+  image: assets/images/logo.png
+  android_12:
+    image: assets/images/logo.png
+    color: "#FF00B7"

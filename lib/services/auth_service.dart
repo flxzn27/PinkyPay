@@ -1,40 +1,68 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthService {
-  // Instance client Supabase
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  // Cek user yang sedang login
   User? get currentUser => _supabase.auth.currentUser;
 
-  // Fungsi Login Email & Password
-  Future<AuthResponse> signIn({required String email, required String password}) async {
-    return await _supabase.auth.signInWithPassword(
+  // LOGIN
+  Future<AuthResponse> signIn({
+    required String email,
+    required String password,
+  }) async {
+    final response = await _supabase.auth.signInWithPassword(
       email: email,
       password: password,
     );
+
+    // Setelah login, pastikan profile ada (auto-heal)
+    final user = response.user;
+    if (user != null) {
+      final profile = await _supabase
+          .from('profiles')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (profile == null) {
+        // Buat profile jika hilang
+        await _supabase.from('profiles').insert({
+          'id': user.id,
+          'email': email,
+          'full_name': 'New User',
+          'balance': 0,
+          'avatar_url': '',
+        });
+      }
+    }
+
+    return response;
   }
 
-  // Fungsi Register (Sign Up)
-  // Sekalian buat data Profile (Nama & Saldo 0)
+  // REGISTER
   Future<AuthResponse> signUp({
-    required String email, 
+    required String email,
     required String password,
     required String fullName,
   }) async {
-    // 1. Daftar Akun Auth
+    // Aktifkan autoConfirm biar langsung punya user.id
     final response = await _supabase.auth.signUp(
       email: email,
       password: password,
+      data: {
+        'full_name': fullName,
+      },
     );
 
-    // 2. Jika sukses, buat data Profile
-    if (response.user != null) {
+    // Tunggu sampai Supabase memberi user.id
+    final user = response.user;
+
+    if (user != null) {
       await _supabase.from('profiles').insert({
-        'id': response.user!.id, // ID Profile = ID User Auth
+        'id': user.id,
         'email': email,
         'full_name': fullName,
-        'balance': 0, // Saldo awal 0
+        'balance': 0,
         'avatar_url': '',
       });
     }
@@ -42,7 +70,6 @@ class AuthService {
     return response;
   }
 
-  // Fungsi Logout
   Future<void> signOut() async {
     await _supabase.auth.signOut();
   }

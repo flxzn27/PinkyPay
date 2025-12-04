@@ -26,35 +26,41 @@ class TransactionModel {
       case TransactionType.payment:
         return 'Payment';
       case TransactionType.splitPay:
-        return 'Split Pay';
+        return 'Split Bill';
       case TransactionType.receive:
         return 'Received';
     }
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'type': type.toString(),
-      'amount': amount,
-      'description': description,
-      'date': date.toIso8601String(),
-      'recipient': recipient,
-      'isIncome': isIncome,
-    };
-  }
-
   factory TransactionModel.fromJson(Map<String, dynamic> json) {
+    // Translate DB string → enum
+    TransactionType getType(String? dbType) {
+      switch (dbType) {
+        case 'topup':
+          return TransactionType.topup;
+        case 'transfer_in':
+          return TransactionType.receive;
+        case 'split_bill':
+          return TransactionType.splitPay;
+        default:
+          return TransactionType.payment;
+      }
+    }
+
+    // Income or Expense
+    bool checkIsIncome(String? dbType) {
+      return dbType == 'topup' || dbType == 'transfer_in';
+    }
+
     return TransactionModel(
-      id: json['id'],
-      type: TransactionType.values.firstWhere(
-        (e) => e.toString() == json['type'],
-      ),
-      amount: json['amount'].toDouble(),
-      description: json['description'],
-      date: DateTime.parse(json['date']),
-      recipient: json['recipient'],
-      isIncome: json['isIncome'],
+      id: json['id']?.toString() ?? '',
+      type: getType(json['type']?.toString()),
+      amount: (json['amount'] ?? 0).toDouble(),
+      description: json['description']?.toString() ?? 'No Description',
+      date: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
+      recipient: json['related_user_id']?.toString(),
+      isIncome: checkIsIncome(json['type']?.toString()),
     );
   }
 }

@@ -29,23 +29,13 @@ class UserModel {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'email': email,
-      'balance': balance,
-      'avatarUrl': avatarUrl,
-    };
-  }
-
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       id: json['id'],
-      name: json['name'],
-      email: json['email'],
-      balance: json['balance'].toDouble(),
-      avatarUrl: json['avatarUrl'] ?? '',
+      name: json['full_name'] ?? json['name'] ?? 'No Name',
+      email: json['email'] ?? '',
+      balance: (json['balance'] ?? 0).toDouble(),
+      avatarUrl: json['avatar_url'] ?? '',
     );
   }
 }
