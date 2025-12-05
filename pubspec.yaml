@@ -1,20 +1,28 @@
-name: PinkyPay 
+name: pinkypay
 description: "A new Flutter project."
 publish_to: 'none'
 
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.9.2
+  sdk: ^3.0.0
 
 dependencies:
   flutter:
     sdk: flutter
+  
+  # UI & Utilities
   flutter_svg: ^2.0.9
   google_fonts: ^6.1.0
   intl: ^0.19.0
   cupertino_icons: ^1.0.8
+  
+  # Backend
   supabase_flutter: ^2.10.3
+  
+  # QR & Camera Features (BARU)
+  mobile_scanner: ^5.2.3  # Library scan QR yang stabil
+  qr_flutter: ^4.1.0      # Library untuk generate QR Code
 
 dev_dependencies:
   flutter_test:
@@ -28,6 +36,7 @@ flutter:
     - assets/images/
     - assets/icons/
 
+# Konfigurasi Splash Screen
 flutter_native_splash:
   color: "#FF00B7" 
   image: assets/images/logo.png

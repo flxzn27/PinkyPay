@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
-import '../config/colors.dart';
-import '../models/user_model.dart';
-import '../models/transaction_model.dart';
-import '../widgets/transaction_item.dart';
-import '../services/transaction_service.dart';
-import 'topup_screen.dart';
-import 'payment_screen.dart';
-import 'split_pay_screen.dart';
-import 'auth/login_screen.dart';
+import '../../config/colors.dart';
+import '../../models/user_model.dart';
+import '../../models/transaction_model.dart';
+import '../../widgets/transaction_item.dart';
+import '../../services/transaction_service.dart';
+import '../actions/topup_screen.dart';
+import '../actions/payment_screen.dart';
+import '../actions/split_pay_screen.dart';
+import '../auth/login_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});

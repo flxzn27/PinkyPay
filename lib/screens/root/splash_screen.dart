@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/colors.dart';
-import 'dashboard_screen.dart';
-import 'auth/login_screen.dart';
+import '../../config/colors.dart';
+import 'main_screen.dart'; // [1] Ensure this import is correct
+import '../auth/login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -16,17 +16,17 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
-  late Animation<double> _slideAnimation; // Tambahan animasi slide
+  late Animation<double> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(seconds: 2), // Durasi total animasi
+      duration: const Duration(seconds: 2),
       vsync: this,
     );
 
-    // Animasi Opacity (Muncul perlahan)
+    // Opacity Animation
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
@@ -34,7 +34,7 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
-    // Animasi Scale (Membesar sedikit saat muncul)
+    // Scale Animation
     _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
@@ -42,7 +42,7 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
-    // Animasi Slide Teks (Naik sedikit dari bawah)
+    // Slide Animation
     _slideAnimation = Tween<double>(begin: 20, end: 0).animate(
       CurvedAnimation(
         parent: _controller,
@@ -52,22 +52,23 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    // Jalankan pengecekan Auth
     _checkAuthAndNavigate();
   }
 
   Future<void> _checkAuthAndNavigate() async {
-    // Tunggu animasi selesai + sedikit delay biar logo terlihat
+    // Wait for animation + delay
     await Future.delayed(const Duration(seconds: 3));
 
     if (!mounted) return;
 
     final session = Supabase.instance.client.auth.currentSession;
+    
     if (session != null) {
+      // [2] NAVIGATE TO MAIN SCREEN (Container for Bottom Nav)
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const DashboardScreen(),
+          pageBuilder: (_, __, ___) => const MainScreen(), // Changed from DashboardScreen to MainScreen
           transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
           transitionDuration: const Duration(milliseconds: 500),
         ),
@@ -100,7 +101,7 @@ class _SplashScreenState extends State<SplashScreen>
             end: Alignment.bottomCenter,
             colors: [
               AppColors.primaryPink,
-              Color(0xFFFF4DC4), // Variasi pink sedikit lebih terang
+              Color(0xFFFF4DC4),
             ],
           ),
         ),
@@ -113,7 +114,7 @@ class _SplashScreenState extends State<SplashScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // LOGO GAMBAR (Assets)
+                    // LOGO IMAGE
                     Transform.scale(
                       scale: _scaleAnimation.value,
                       child: Container(
@@ -130,11 +131,10 @@ class _SplashScreenState extends State<SplashScreen>
                           ],
                         ),
                         child: Image.asset(
-                          'assets/images/logo.png', // Pastikan file ini ada
-                          width: 80, // Sesuaikan ukuran
+                          'assets/images/logo.png',
+                          width: 80,
                           height: 80,
                           errorBuilder: (context, error, stackTrace) {
-                            // Fallback jika gambar gagal dimuat/belum ada
                             return const Icon(
                               Icons.wallet,
                               size: 60,
@@ -146,7 +146,7 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                     const SizedBox(height: 30),
                     
-                    // TEKS JUDUL (dengan efek slide up)
+                    // TITLE TEXT
                     Transform.translate(
                       offset: Offset(0, _slideAnimation.value),
                       child: const Column(
@@ -155,10 +155,10 @@ class _SplashScreenState extends State<SplashScreen>
                             'Pinky Pay',
                             style: TextStyle(
                               fontSize: 36,
-                              fontWeight: FontWeight.w800, // Lebih tebal
+                              fontWeight: FontWeight.w800,
                               color: AppColors.white,
                               letterSpacing: 1.5,
-                              fontFamily: 'Poppins', // Pastikan font sudah didaftarkan
+                              fontFamily: 'Poppins',
                             ),
                           ),
                           SizedBox(height: 8),
@@ -167,7 +167,7 @@ class _SplashScreenState extends State<SplashScreen>
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w400,
-                              color: Color(0xFFFce4ec), // Pink sangat muda
+                              color: Color(0xFFFce4ec),
                               letterSpacing: 1.0,
                             ),
                           ),
