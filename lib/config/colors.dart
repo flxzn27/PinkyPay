@@ -27,4 +27,11 @@ class AppColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
+  
+  // Additional Gradient for Cards (Light Green)
+  static const LinearGradient lightGreenGradient = LinearGradient(
+    colors: [lightGreen, Color(0xFFE8F9E8)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 }
