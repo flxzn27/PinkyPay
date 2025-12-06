@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../config/colors.dart';
 import '../../models/user_model.dart';
 import '../auth/login_screen.dart';
+// Import Halaman-Halaman Baru
+import '../profile/edit_profile_screen.dart';
+import '../profile/change_pin_screen.dart';
+import '../profile/settings_screen.dart';
+import '../profile/info_screens.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -78,7 +84,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   }
 
   Future<void> _logout() async {
-    // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -121,8 +126,66 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
   String _getMemberSince() {
     if (user?.createdAt == null) return 'Member since 2025';
-    final date = DateFormat('MMMM yyyy').format(user!.createdAt);
-    return 'Member since $date';
+    try {
+        final date = user!.createdAt; 
+        return 'Member since ${DateFormat('MMMM yyyy').format(date)}';
+    } catch (e) {
+        return 'Member since 2025';
+    }
+  }
+
+  // --- FITUR BARU: SHOW QR CODE ---
+  void _showMyQrCode() {
+    if (user == null) return;
+    
+    // Protokol QR: pinkypay:transfer_to:[email]
+    final qrData = 'pinkypay:transfer_to:${user!.email}';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(32),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 24),
+            const Text("Terima Uang", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+            const SizedBox(height: 8),
+            Text("Tunjukkan QR ini ke temanmu", style: TextStyle(color: Colors.grey[600])),
+            const SizedBox(height: 32),
+            
+            // WIDGET QR CODE
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.greyLight),
+                boxShadow: [BoxShadow(color: AppColors.primaryPink.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 10))],
+              ),
+              child: QrImageView(
+                data: qrData,
+                version: QrVersions.auto,
+                size: 200.0,
+                foregroundColor: AppColors.darkPurple,
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            Text(user!.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+            Text(user!.email, style: TextStyle(color: Colors.grey[500])),
+            const SizedBox(height: 40),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -145,7 +208,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         slivers: [
           // MODERN APP BAR WITH PROFILE HEADER
           SliverAppBar(
-            expandedHeight: 320,
+            expandedHeight: 340,
             floating: false,
             pinned: true,
             backgroundColor: AppColors.primaryPink,
@@ -160,7 +223,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 20),
                         // Profile Picture with Ring
                         Stack(
                           alignment: Alignment.center,
@@ -172,7 +235,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.3),
+                                  color: Colors.white.withOpacity(0.3),
                                   width: 3,
                                 ),
                               ),
@@ -189,7 +252,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.2),
+                                    color: Colors.black.withOpacity(0.2),
                                     blurRadius: 20,
                                     offset: const Offset(0, 10),
                                   ),
@@ -213,28 +276,31 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                                     : null,
                               ),
                             ),
-                            // Edit Button
+                            // QR Button (Positioned)
                             Positioned(
                               bottom: 0,
                               right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  gradient: AppColors.primaryGradient,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.white, width: 3),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primaryPink.withValues(alpha: 0.4),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.camera_alt_rounded,
-                                  color: Colors.white,
-                                  size: 20,
+                              child: GestureDetector(
+                                onTap: _showMyQrCode, // AKSES QR CODE
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    gradient: AppColors.primaryGradient,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 3),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppColors.primaryPink.withOpacity(0.4),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.qr_code_rounded, // Icon QR
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                                 ),
                               ),
                             ),
@@ -273,7 +339,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         Text(
                           user?.email ?? 'email@example.com',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.9),
+                            color: Colors.white.withOpacity(0.9),
                             fontSize: 15,
                             fontWeight: FontWeight.w500,
                           ),
@@ -282,7 +348,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
+                            color: Colors.white.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -304,15 +370,14 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               Container(
                 margin: const EdgeInsets.only(right: 16),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
+                  color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: IconButton(
                   icon: const Icon(Icons.settings_rounded, color: Colors.white),
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Settings coming soon!')),
-                    );
+                    // Direct ke Settings Screen
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
                   },
                 ),
               ),
@@ -368,7 +433,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.darkPurple.withValues(alpha: 0.3),
+                    color: AppColors.darkPurple.withOpacity(0.3),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -379,7 +444,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Icon(
@@ -405,7 +470,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                         Text(
                           'Get Rp 50.000 per invite!',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.9),
+                            color: Colors.white.withOpacity(0.9),
                             fontSize: 13,
                           ),
                         ),
@@ -419,7 +484,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
+                          color: Colors.black.withOpacity(0.1),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -465,7 +530,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryPink.withValues(alpha: 0.08),
+                      color: AppColors.primaryPink.withOpacity(0.08),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
                     ),
@@ -478,7 +543,14 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       title: 'Edit Profile',
                       subtitle: 'Update your personal information',
                       color: AppColors.primaryPink,
-                      onTap: () {},
+                      onTap: () async {
+                        // Navigasi ke Edit Profile & Refresh data jika ada update
+                        final result = await Navigator.push(
+                          context, 
+                          MaterialPageRoute(builder: (_) => EditProfileScreen(user: user!))
+                        );
+                        if (result == true) _fetchUserProfile();
+                      },
                     ),
                     _buildDivider(),
                     _buildModernMenuItem(
@@ -486,7 +558,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       title: 'Change PIN',
                       subtitle: 'Secure your account',
                       color: AppColors.lightBlue,
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePinScreen()));
+                      },
                     ),
                     _buildDivider(),
                     _buildModernMenuItem(
@@ -498,6 +572,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       switchValue: _biometricEnabled,
                       onSwitchChanged: (val) {
                         setState(() => _biometricEnabled = val);
+                        if(val) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Biometric Activated!")));
                       },
                     ),
                     _buildDivider(),
@@ -543,7 +618,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryPink.withValues(alpha: 0.08),
+                      color: AppColors.primaryPink.withOpacity(0.08),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
                     ),
@@ -556,7 +631,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       title: 'Help Center',
                       subtitle: 'Get help and support',
                       color: const Color(0xFF4CAF50),
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpCenterScreen()));
+                      },
                     ),
                     _buildDivider(),
                     _buildModernMenuItem(
@@ -564,7 +641,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       title: 'About Pinky Pay',
                       subtitle: 'Learn more about us',
                       color: AppColors.lightBlue,
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutAppScreen()));
+                      },
                     ),
                     _buildDivider(),
                     _buildModernMenuItem(
@@ -572,7 +651,9 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       title: 'Terms & Privacy',
                       subtitle: 'Read our policies',
                       color: AppColors.darkPurple,
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const TermsScreen()));
+                      },
                     ),
                   ],
                 ),
@@ -596,12 +677,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   ),
                   elevation: 0,
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.logout_rounded, size: 24),
-                    const SizedBox(width: 12),
-                    const Text(
+                    Icon(Icons.logout_rounded, size: 24),
+                    SizedBox(width: 12),
+                    Text(
                       'Logout',
                       style: TextStyle(
                         fontSize: 16,
@@ -629,7 +710,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
+                  const Text(
                     'Version 1.0.0',
                     style: TextStyle(
                       color: AppColors.greyText,
@@ -637,7 +718,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
+                  const Text(
                     'Made with 💖 in Indonesia',
                     style: TextStyle(
                       color: AppColors.greyText,
@@ -661,7 +742,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.15),
+            color: color.withOpacity(0.15),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -672,7 +753,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(icon, color: color, size: 28),
@@ -719,7 +800,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
       leading: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
+          color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Icon(icon, color: color, size: 24),
@@ -748,13 +829,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           : Icon(
               Icons.arrow_forward_ios_rounded,
               size: 16,
-              color: AppColors.greyText.withValues(alpha: 0.5),
+              color: AppColors.greyText.withOpacity(0.5),
             ),
     );
   }
 
   Widget _buildDivider() {
-    return Divider(
+    return const Divider(
       height: 1,
       thickness: 1,
       indent: 72,

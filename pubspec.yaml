@@ -23,6 +23,7 @@ dependencies:
   # QR & Camera Features (BARU)
   mobile_scanner: ^5.2.3  # Library scan QR yang stabil
   qr_flutter: ^4.1.0      # Library untuk generate QR Code
+  image_picker: ^1.0.7
 
 dev_dependencies:
   flutter_test:

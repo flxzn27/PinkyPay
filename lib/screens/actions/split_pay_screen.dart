@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/colors.dart';
 import '../../models/transaction_model.dart';
-import '../../services/transaction_service.dart'; // [1] Import Service
+import '../../models/user_model.dart';
+import '../../models/friend_model.dart';
+import '../../services/transaction_service.dart';
+import '../../services/friend_service.dart'; // Import Friend Service
 
 class SplitPayScreen extends StatefulWidget {
   final double currentBalance;
@@ -22,105 +26,179 @@ class SplitPayScreen extends StatefulWidget {
 
 class _SplitPayScreenState extends State<SplitPayScreen> {
   final TextEditingController _totalAmountController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _noteController = TextEditingController();
   
-  final List<String> _participants = ['You']; // Default selalu ada 'You'
+  // State Peserta (Diri sendiri + Teman terpilih)
+  final List<UserModel> _selectedFriends = [];
   
-  // [2] Service & Loading State
-  final TransactionService _service = TransactionService();
+  // Service
+  final TransactionService _transactionService = TransactionService();
+  final FriendService _friendService = FriendService();
+  final SupabaseClient _supabase = Supabase.instance.client;
+  
   bool _isLoading = false;
 
+  // Total orang = Teman + Diri Sendiri (1)
+  int get totalPerson => _selectedFriends.length + 1;
+
   double get splitAmount {
-    final total = double.tryParse(_totalAmountController.text) ?? 0;
-    return _participants.isNotEmpty ? total / _participants.length : 0;
+    // Hilangkan karakter non-angka
+    final cleanText = _totalAmountController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final total = double.tryParse(cleanText) ?? 0;
+    return totalPerson > 0 ? total / totalPerson : 0;
   }
 
-  void _addParticipant() {
-    if (_nameController.text.isEmpty) {
-      _showSnackBar('Please enter a name', isError: true);
-      return;
-    }
-    setState(() {
-      _participants.add(_nameController.text);
-      _nameController.clear();
-    });
-  }
+  // --- LOGIC MEMILIH TEMAN ---
+  void _showFriendSelector() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: Colors.white,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24),
+                child: Text("Pilih Teman Patungan", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: FutureBuilder<List<FriendModel>>(
+                  future: _friendService.getMyFriends(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator(color: AppColors.primaryPink));
+                    }
+                    
+                    final friends = snapshot.data ?? [];
+                    final myId = _supabase.auth.currentUser!.id;
 
-  void _removeParticipant(int index) {
-    if (index == 0) return; // Tidak bisa hapus diri sendiri
-    setState(() {
-      _participants.removeAt(index);
-    });
+                    if (friends.isEmpty) {
+                      return Center(child: Text("Belum ada teman, yuk add dulu!", style: TextStyle(color: Colors.grey[400])));
+                    }
+
+                    return ListView.builder(
+                      itemCount: friends.length,
+                      itemBuilder: (context, index) {
+                        final friendship = friends[index];
+                        final isMeSender = friendship.sender?.id == myId;
+                        final friendProfile = isMeSender ? friendship.receiver : friendship.sender;
+                        
+                        if (friendProfile == null) return const SizedBox();
+
+                        // Cek apakah sudah terpilih
+                        final isSelected = _selectedFriends.any((f) => f.id == friendProfile.id);
+
+                        return CheckboxListTile(
+                          activeColor: AppColors.primaryPink,
+                          title: Text(friendProfile.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(friendProfile.email),
+                          secondary: CircleAvatar(
+                            backgroundColor: AppColors.lightPeach,
+                            child: Text(friendProfile.name[0].toUpperCase(), style: const TextStyle(color: AppColors.primaryPink, fontWeight: FontWeight.bold)),
+                          ),
+                          value: isSelected,
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == true) {
+                                _selectedFriends.add(friendProfile);
+                              } else {
+                                _selectedFriends.removeWhere((f) => f.id == friendProfile.id);
+                              }
+                            });
+                            Navigator.pop(context); // Tutup sheet biar refresh UI utama
+                            _showFriendSelector(); // Buka lagi (trik refresh bottom sheet)
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryPink,
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text("Selesai", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              )
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _processSplitPay() async {
-    // 1. Validasi Input
-    if (_totalAmountController.text.isEmpty) {
-      _showSnackBar('Please enter total bill amount', isError: true);
-      return;
-    }
+    // 1. Validasi
+    final cleanText = _totalAmountController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final totalAmount = double.tryParse(cleanText);
 
-    final totalAmount = double.tryParse(_totalAmountController.text);
     if (totalAmount == null || totalAmount <= 0) {
-      _showSnackBar('Invalid amount', isError: true);
+      _showErrorSnackBar('Masukan total tagihan dulu ya 🧾');
       return;
     }
 
-    if (_participants.length < 2) {
-      _showSnackBar('Add at least one friend to split with', isError: true);
+    if (_selectedFriends.isEmpty) {
+      _showErrorSnackBar('Pilih minimal 1 teman untuk patungan 👥');
       return;
     }
 
-    // Cek saldo (asumsi kita talangin dulu atau bayar bagian kita)
-    if (splitAmount > widget.currentBalance) {
-      _showSnackBar('Insufficient balance for your share', isError: true);
+    // Cek saldo (asumsi kita talangin dulu)
+    if (totalAmount > widget.currentBalance) {
+      _showErrorSnackBar('Saldo kamu kurang untuk nalangin tagihan ini 🙈');
       return;
     }
 
-    // 2. Mulai Proses Database
     setState(() => _isLoading = true);
 
     try {
-      final note = _descriptionController.text.isEmpty
-          ? 'Split Bill with ${_participants.length - 1} friends'
-          : _descriptionController.text;
+      final note = _noteController.text.isEmpty
+          ? 'Split Bill with ${_selectedFriends.length} friends'
+          : _noteController.text;
 
-      // PANGGIL SERVICE: Bayar bagian sendiri & Catat di DB
-      await _service.paySplitBill(splitAmount, note);
+      // PANGGIL SERVICE (Bayar Full Amount dari Saldo Sendiri)
+      // Logic: Kurangi saldo user sebesar Total Amount
+      // Nanti fitur "Request Money" ke teman bisa dikembangkan terpisah
+      await _transactionService.paySplitBill(totalAmount, note);
 
-      // Buat model transaksi untuk update UI lokal (agar instan)
+      // Catat transaksi lokal
       final transaction = TransactionModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         type: TransactionType.splitPay,
-        amount: splitAmount, 
+        amount: totalAmount, 
         description: note,
         date: DateTime.now(),
         isIncome: false,
       );
 
-      // Update Dashboard UI
-      widget.onSplitPay(splitAmount, false);
+      widget.onSplitPay(totalAmount, false); // false = pengeluaran
       widget.onAddTransaction(transaction);
 
-      // 3. Tampilkan Sukses
       if (mounted) {
         _showSuccessDialog(totalAmount, splitAmount);
       }
     } catch (e) {
-      if (mounted) {
-        _showSnackBar('Gagal memproses: $e', isError: true);
-      }
+      if (mounted) _showErrorSnackBar('Gagal memproses: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _showSnackBar(String message, {bool isError = false}) {
+  void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : AppColors.primaryPink,
+        backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -130,79 +208,87 @@ class _SplitPayScreenState extends State<SplitPayScreen> {
   void _showSuccessDialog(double total, double share) {
     final currency = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
     
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: AppColors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.lightBlue.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.receipt_long_rounded, color: AppColors.lightBlue, size: 40),
+      isDismissible: false,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(32),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.lightBlue.withOpacity(0.1),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: 20),
-              const Text(
-                'Bill Split Created!',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
+              child: const Icon(Icons.receipt_long_rounded, color: AppColors.lightBlue, size: 48),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Split Bill Berhasil!',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Kamu telah membayar lunas tagihan ini',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 24),
+            
+            // RINCIAN KOTAK
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8F9FD),
+                borderRadius: BorderRadius.circular(16),
               ),
-              const SizedBox(height: 16),
-              // Rincian
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.greyLight,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Total Bill'),
-                        Text(currency.format(total), style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const Divider(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Per Person (${_participants.length})'),
-                        Text(
-                          currency.format(share),
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPink),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context); // Tutup Dialog
-                    Navigator.pop(context); // Kembali ke Dashboard
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryPink,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Total Tagihan', style: TextStyle(color: Colors.grey)),
+                      Text(currency.format(total), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    ],
                   ),
-                  child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                ),
+                  const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Divider()),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Per Orang (${totalPerson}x)', style: const TextStyle(color: Colors.grey)),
+                      Text(
+                        currency.format(share),
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPink, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context); // Tutup Sheet
+                  Navigator.pop(context); // Kembali ke Dashboard
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryPink,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                child: const Text('Selesai', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -213,50 +299,45 @@ class _SplitPayScreenState extends State<SplitPayScreen> {
     final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
 
     return Scaffold(
-      backgroundColor: AppColors.greyLight,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Split Bill', style: TextStyle(color: AppColors.darkPurple, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        iconTheme: const IconThemeData(color: AppColors.darkPurple),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.darkPurple),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // CARD INPUT UTAMA
+            // INPUT TOTAL TAGIHAN
+            const Text("Total Tagihan", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.greyText)),
+            const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.white,
+                color: const Color(0xFFF8F9FD),
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  const Text('Total Bill Amount', style: TextStyle(fontSize: 14, color: AppColors.greyText)),
-                  TextField(
-                    controller: _totalAmountController,
-                    keyboardType: TextInputType.number,
-                    onChanged: (val) => setState(() {}), // Update kalkulasi realtime
-                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
-                    decoration: const InputDecoration(
-                      prefixText: 'Rp ',
-                      prefixStyle: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.greyText),
-                      border: InputBorder.none,
-                      hintText: '0',
-                    ),
-                  ),
-                  const Divider(),
-                  TextField(
-                    controller: _descriptionController,
-                    decoration: const InputDecoration(
-                      hintText: 'What is this for? (e.g. Dinner)',
-                      border: InputBorder.none,
-                      icon: Icon(Icons.edit_note, color: AppColors.primaryPink),
+                  const Text("Rp", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.greyText)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _totalAmountController,
+                      keyboardType: TextInputType.number,
+                      onChanged: (val) => setState(() {}), // Refresh kalkulasi
+                      style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
+                      decoration: const InputDecoration(
+                        hintText: "0",
+                        border: InputBorder.none,
+                      ),
                     ),
                   ),
                 ],
@@ -265,107 +346,116 @@ class _SplitPayScreenState extends State<SplitPayScreen> {
 
             const SizedBox(height: 24),
 
-            // SUMMARY SINGKAT (PITA HASIL)
-            if (splitAmount > 0)
-              Container(
-                margin: const EdgeInsets.only(bottom: 24),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                decoration: BoxDecoration(
-                  gradient: AppColors.cardGradient, // Pastikan ada di colors.dart
+            // INPUT CATATAN
+            TextField(
+              controller: _noteController,
+              decoration: InputDecoration(
+                hintText: 'Untuk pembayaran apa? (Contoh: Makan Siang)',
+                hintStyle: TextStyle(color: Colors.grey[400]),
+                prefixIcon: const Icon(Icons.edit_note_rounded, color: AppColors.primaryPink),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: Colors.grey[200]!),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Each person pays', style: TextStyle(color: AppColors.white)),
-                    Text(
-                      currencyFormatter.format(splitAmount),
-                      style: const TextStyle(color: AppColors.white, fontWeight: FontWeight.bold, fontSize: 18),
-                    ),
-                  ],
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: Colors.grey[200]!),
                 ),
               ),
+            ),
 
-            // ADD PARTICIPANT SECTION
-            const Text('Participants', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
-            const SizedBox(height: 12),
-            
-            // Input Add Friend
+            const SizedBox(height: 32),
+
+            // BAGIAN PESERTA (PARTICIPANTS)
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: TextField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(
-                        hintText: 'Enter friend\'s name',
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16),
-                        border: InputBorder.none,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                FloatingActionButton.small(
-                  onPressed: _addParticipant,
-                  backgroundColor: AppColors.darkPurple,
-                  elevation: 0,
-                  child: const Icon(Icons.add, color: Colors.white),
-                ),
+                const Text("Peserta Patungan", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+                Text("${totalPerson} Orang", style: const TextStyle(color: AppColors.greyText)),
               ],
             ),
-
             const SizedBox(height: 16),
 
-            // LIST PARTICIPANTS
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _participants.length,
-              itemBuilder: (context, index) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: AppColors.white,
-                    borderRadius: BorderRadius.circular(12),
+            // LIST PESERTA
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[200]!),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  // Diri Sendiri (Selalu ada)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(
+                      backgroundColor: AppColors.primaryPink,
+                      child: Text("Y", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                    title: const Text("You (Owner)", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+                    trailing: Text(
+                      currencyFormatter.format(splitAmount),
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.darkPurple),
+                    ),
                   ),
-                  child: ListTile(
+                  const Divider(),
+                  
+                  // Teman Terpilih
+                  ..._selectedFriends.map((friend) => ListTile(
+                    contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
-                      backgroundColor: index == 0 ? AppColors.primaryPink : AppColors.lightBlue.withOpacity(0.3),
-                      child: Text(
-                        _participants[index][0].toUpperCase(),
-                        style: TextStyle(
-                          color: index == 0 ? Colors.white : AppColors.darkPurple,
-                          fontWeight: FontWeight.bold,
+                      backgroundColor: AppColors.lightPeach,
+                      child: Text(friend.name[0].toUpperCase(), style: const TextStyle(color: AppColors.primaryPink, fontWeight: FontWeight.bold)),
+                    ),
+                    title: Text(friend.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          currencyFormatter.format(splitAmount),
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
                         ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () => setState(() => _selectedFriends.remove(friend)),
+                          child: const Icon(Icons.close_rounded, color: Colors.red, size: 20),
+                        )
+                      ],
+                    ),
+                  )),
+
+                  // Tombol Tambah Teman
+                  InkWell(
+                    onTap: _showFriendSelector,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppColors.lightBlue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.lightBlue.withOpacity(0.3)),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.person_add_alt_1_rounded, color: AppColors.lightBlue, size: 20),
+                          SizedBox(width: 8),
+                          Text("Tambah Teman", style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.lightBlue)),
+                        ],
                       ),
                     ),
-                    title: Text(
-                      _participants[index],
-                      style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.darkPurple),
-                    ),
-                    trailing: index == 0 
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: AppColors.greyLight, borderRadius: BorderRadius.circular(8)),
-                            child: const Text("Owner", style: TextStyle(fontSize: 10, color: AppColors.greyText)),
-                          )
-                        : IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-                            onPressed: () => _removeParticipant(index),
-                          ),
                   ),
-                );
-              },
+                ],
+              ),
             ),
 
-            const SizedBox(height: 30),
+            const SizedBox(height: 40),
 
-            // BUTTON SPLIT (DENGAN LOADING)
+            // BUTTON BAYAR
             SizedBox(
               width: double.infinity,
               height: 56,
@@ -376,24 +466,12 @@ class _SplitPayScreenState extends State<SplitPayScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   elevation: 5,
                   shadowColor: AppColors.primaryPink.withOpacity(0.4),
-                  disabledBackgroundColor: AppColors.primaryPink.withOpacity(0.5),
                 ),
                 child: _isLoading
-                    ? const SizedBox(
-                        height: 24,
-                        width: 24,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      )
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.call_split, color: Colors.white),
-                          SizedBox(width: 8),
-                          Text(
-                            'Split Bill Now',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                        ],
+                    ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text(
+                        'Bayar & Bagi Tagihan',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
               ),
             ),
@@ -401,13 +479,5 @@ class _SplitPayScreenState extends State<SplitPayScreen> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _totalAmountController.dispose();
-    _descriptionController.dispose();
-    _nameController.dispose();
-    super.dispose();
   }
 }

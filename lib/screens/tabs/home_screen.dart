@@ -9,6 +9,7 @@ import '../../services/transaction_service.dart';
 import '../actions/topup_screen.dart';
 import '../actions/payment_screen.dart';
 import '../actions/split_pay_screen.dart';
+import '../actions/friend_screen.dart'; // ✅ Import halaman FriendScreen
 import '../auth/login_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -61,7 +62,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   Future<void> _fetchUserData() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
-      print("📱 DEBUG: CURRENT USER ID = $userId");
+      // print("📱 DEBUG: CURRENT USER ID = $userId");
       if (userId == null) return;
 
       final results = await Future.wait<dynamic>([
@@ -419,23 +420,17 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                             ),
                           ),
                         ),
+                        // ✅ TOMBOL FRIEND YANG SUDAH DI-UPDATE
                         _buildModernMenuItem(
                           icon: Icons.people_rounded,
                           label: "Friend",
-                          color: Color(0xFFFFB74D),
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text("Fitur Friend segera hadir! 👥"),
-                                backgroundColor: AppColors.darkPurple,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                margin: const EdgeInsets.all(16),
-                              ),
-                            );
-                          },
+                          color: const Color(0xFFFFB74D),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const FriendScreen(),
+                            ),
+                          ),
                         ),
                       ],
                     ),

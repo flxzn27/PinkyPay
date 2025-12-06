@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'dart:math' as math;
 import '../../config/colors.dart';
 import '../../models/user_model.dart';
+import '../../services/transaction_service.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -13,10 +14,16 @@ class WalletScreen extends StatefulWidget {
 }
 
 class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderStateMixin {
+  // Data State
   UserModel? user;
   bool _isLoading = true;
   bool _isCardFlipped = false;
+  bool _isCardFrozen = false; 
+  double _totalIncome = 0;
+  double _totalExpense = 0;
+
   final _supabase = Supabase.instance.client;
+  final TransactionService _transactionService = TransactionService();
   
   late AnimationController _animationController;
   late Animation<double> _flipAnimation;
@@ -25,7 +32,7 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _initAnimation();
-    _fetchUserProfile();
+    _fetchWalletData();
   }
 
   void _initAnimation() {
@@ -34,7 +41,7 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
       vsync: this,
     );
     _flipAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOutBack),
     );
   }
 
@@ -44,20 +51,36 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
     super.dispose();
   }
 
-  Future<void> _fetchUserProfile() async {
+  Future<void> _fetchWalletData() async {
+    setState(() => _isLoading = true);
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
 
-      final data = await _supabase
+      final profileData = await _supabase
           .from('profiles')
           .select()
           .eq('id', userId)
           .single();
 
+      final transactions = await _transactionService.getTransactions();
+      
+      double income = 0;
+      double expense = 0;
+
+      for (var trx in transactions) {
+        if (trx.isIncome) {
+          income += trx.amount;
+        } else {
+          expense += trx.amount;
+        }
+      }
+
       if (mounted) {
         setState(() {
-          user = UserModel.fromJson(data);
+          user = UserModel.fromJson(profileData);
+          _totalIncome = income;
+          _totalExpense = expense;
           _isLoading = false;
         });
       }
@@ -76,301 +99,232 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
     setState(() => _isCardFlipped = !_isCardFlipped);
   }
 
+  void _toggleFreeze() {
+    setState(() {
+      _isCardFrozen = !_isCardFrozen;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_isCardFrozen ? "Card Frozen ❄️" : "Card Unfrozen 🔥"),
+        backgroundColor: _isCardFrozen ? Colors.blueGrey : Colors.green,
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
         body: Container(
           decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
-          child: const Center(
-            child: CircularProgressIndicator(color: Colors.white),
-          ),
+          child: const Center(child: CircularProgressIndicator(color: Colors.white)),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: AppColors.greyLight,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          // MODERN APP BAR
-          SliverAppBar(
-            expandedHeight: 120,
-            floating: false,
-            pinned: true,
-            backgroundColor: AppColors.primaryPink,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+      backgroundColor: const Color(0xFFF8F9FD),
+      body: RefreshIndicator(
+        onRefresh: _fetchWalletData,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // --- [FIXED] APP BAR OVERFLOW ---
+            SliverAppBar(
+              expandedHeight: 180, // ✅ Dinaikkan jadi 180 (Safe Zone)
+              floating: false,
+              pinned: true,
+              backgroundColor: AppColors.primaryPink,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0), // ❌ Hapus padding vertical
+                      child: Center( // ✅ Gunakan Center agar konten vertikal otomatis di tengah
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            Flexible( // ✅ Bungkus dengan Flexible biar teks ga nabrak kalau layar sempit
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min, // ✅ Penting: Ambil tinggi secukupnya
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'My Wallet', 
+                                    style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Manage your finance', 
+                                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
+                                color: Colors.white.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(14),
                               ),
-                              child: const Icon(
-                                Icons.account_balance_wallet_rounded,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            const Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'My Wallet',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                Text(
-                                  'Manage your cards',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
+                              child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.white),
                             ),
                           ],
                         ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            // KARTU VIRTUAL
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Text('Virtual Card', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+                            if (_isCardFrozen) 
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(color: Colors.blueGrey, borderRadius: BorderRadius.circular(4)),
+                                  child: const Text("FROZEN", style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                                ),
+                              )
+                          ],
+                        ),
+                        TextButton.icon(
+                          onPressed: _toggleCard,
+                          icon: Icon(_isCardFlipped ? Icons.visibility_rounded : Icons.visibility_off_rounded, size: 18),
+                          label: Text(_isCardFlipped ? 'Show Front' : 'Show CVV'),
+                          style: TextButton.styleFrom(foregroundColor: AppColors.primaryPink),
+                        ),
                       ],
                     ),
-                  ),
-                ),
-              ),
-            ),
-            actions: [
-              Container(
-                margin: const EdgeInsets.only(right: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('QR Scanner coming soon!')),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-
-          // VIRTUAL CARD WITH FLIP ANIMATION
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Virtual Card',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.darkPurple,
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: _toggleCard,
-                        icon: const Icon(Icons.flip_rounded, size: 18),
-                        label: Text(_isCardFlipped ? 'Show Front' : 'Show Back'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primaryPink,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _buildFlippableCard(),
-                ],
-              ),
-            ),
-          ),
-
-          // QUICK ACTIONS
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Quick Actions',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.darkPurple,
+                    const SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: _toggleCard,
+                      child: _buildFlippableCard(),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildQuickAction(
-                          'Freeze Card',
-                          Icons.lock_rounded,
-                          AppColors.lightBlue,
-                          () {},
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildQuickAction(
-                          'Card Limits',
-                          Icons.tune_rounded,
-                          AppColors.darkPurple,
-                          () {},
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildQuickAction(
-                          'Replace',
-                          Icons.credit_card_rounded,
-                          const Color(0xFFFFB74D),
-                          () {},
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // FINANCE ANALYSIS
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Finance Analysis',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.darkPurple,
+            // QUICK ACTIONS
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildQuickAction(
+                            _isCardFrozen ? 'Unfreeze' : 'Freeze',
+                            _isCardFrozen ? Icons.lock_open_rounded : Icons.lock_rounded,
+                            _isCardFrozen ? Colors.green : AppColors.lightBlue,
+                            _toggleFreeze,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildQuickAction('Set Limit', Icons.tune_rounded, AppColors.darkPurple, () {
+                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Fitur Limit akan segera hadir!")));
+                        })),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildQuickAction('Pin Change', Icons.pin_invoke_rounded, const Color(0xFFFFB74D), () {
+                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Fitur Ganti PIN demi keamanan akan segera hadir!")));
+                        })),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          'Income',
-                          2500000,
-                          const Color(0xFF4CAF50),
-                          Icons.trending_up_rounded,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Expense',
-                          1200000,
-                          const Color(0xFFEF5350),
-                          Icons.trending_down_rounded,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // LINKED PAYMENT METHODS
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Linked Methods',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.darkPurple,
+            // FINANCE ANALYSIS
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Monthly Analysis', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            'Income',
+                            _totalIncome,
+                            const Color(0xFF4CAF50),
+                            Icons.arrow_downward_rounded,
+                          ),
                         ),
-                      ),
-                      TextButton(
-                        onPressed: () {},
-                        child: const Text(
-                          'See All',
-                          style: TextStyle(color: AppColors.primaryPink),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildStatCard(
+                            'Expense',
+                            _totalExpense,
+                            const Color(0xFFEF5350),
+                            Icons.arrow_upward_rounded,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _buildLinkedCardItem(
-                    'BCA',
-                    '**** **** **** 4589',
-                    'B',
-                    const Color(0xFF005DAA),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildLinkedCardItem(
-                    'Mandiri',
-                    '**** **** **** 1121',
-                    'M',
-                    const Color(0xFF003D79),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildLinkedCardItem(
-                    'BRI',
-                    '**** **** **** 7899',
-                    'B',
-                    const Color(0xFF0067B8),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildAddCardButton(),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
 
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
-        ],
+            // LINKED METHODS
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Linked Methods', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+                    const SizedBox(height: 16),
+                    _buildLinkedCardItem('BCA', '**** 4589', 'B', const Color(0xFF005DAA)),
+                    const SizedBox(height: 12),
+                    _buildLinkedCardItem('Mandiri', '**** 1121', 'M', const Color(0xFF003D79)),
+                    const SizedBox(height: 12),
+                    _buildLinkedCardItem('GoPay', 'Link Account', 'G', const Color(0xFF00AED6)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
+  // --- WIDGET BUILDERS TETAP SAMA ---
   Widget _buildFlippableCard() {
     return AnimatedBuilder(
       animation: _flipAnimation,
       builder: (context, child) {
         final angle = _flipAnimation.value * math.pi;
         final isBack = angle > math.pi / 2;
-        
         return Transform(
           alignment: Alignment.center,
           transform: Matrix4.identity()
@@ -389,145 +343,92 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
   }
 
   Widget _buildCardFront() {
-    final currencyFormat = NumberFormat.currency(
-      locale: 'id_ID',
-      symbol: 'Rp ',
-      decimalDigits: 0,
-    );
+    final currencyFormat = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+    final List<Color> gradientColors = _isCardFrozen
+        ? [Colors.grey.shade400, Colors.grey.shade600]
+        : [const Color(0xFFFF00B7), const Color(0xFFFF4DC4), const Color(0xFF8B4F91)];
 
     return Container(
       width: double.infinity,
       height: 220,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFF00B7), Color(0xFFFF4DC4), Color(0xFF8B4F91)],
+        gradient: LinearGradient(
+          colors: gradientColors,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryPink.withValues(alpha: 0.4),
-            blurRadius: 25,
-            offset: const Offset(0, 15),
+            color: (_isCardFrozen ? Colors.grey : AppColors.primaryPink).withOpacity(0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Pinky Pay',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                  fontStyle: FontStyle.italic,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.contactless_rounded,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-            ],
-          ),
-          Column(
+      child: FittedBox( // ✅ FittedBox agar isi kartu tidak overflow di HP kecil
+        fit: BoxFit.scaleDown,
+        child: SizedBox(
+          width: 320,
+          height: 172,
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 50,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFD700).withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: const Center(
-                  child: Icon(Icons.sim_card_rounded, color: Colors.black54, size: 24),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                '**** **** **** 8829',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  letterSpacing: 3,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Pinky Pay',
+                    style: TextStyle(color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.bold, fontSize: 18, fontStyle: FontStyle.italic),
+                  ),
+                  if (_isCardFrozen) const Icon(Icons.lock_rounded, color: Colors.white)
+                  else const Icon(Icons.contactless_rounded, color: Colors.white70, size: 28),
+                ],
+              ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Card Holder',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
+                  Container(
+                    width: 45, height: 35,
+                    decoration: BoxDecoration(
+                      color: _isCardFrozen ? Colors.grey.shade300 : const Color(0xFFFFD700).withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    user?.name.toUpperCase() ?? 'USER NAME',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '**** **** **** 8829',
+                    style: TextStyle(color: Colors.white, fontSize: 22, letterSpacing: 3, fontWeight: FontWeight.w600, fontFamily: 'Courier'),
                   ),
                 ],
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Balance',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Card Holder', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)),
+                      Text(user?.name.toUpperCase() ?? 'USER', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    currencyFormat.format(user?.balance ?? 0),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('Balance', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)),
+                      Text(
+                        _isCardFrozen ? 'Rp ---' : currencyFormat.format(user?.balance ?? 0), 
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+                      ),
+                    ],
                   ),
                 ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -537,94 +438,50 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
       width: double.infinity,
       height: 220,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF462749), Color(0xFF6A3A6F), Color(0xFF8B4F91)],
+        gradient: LinearGradient(
+          colors: _isCardFrozen 
+              ? [Colors.grey.shade700, Colors.grey.shade800]
+              : [const Color(0xFF2E1A30), const Color(0xFF462749)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(
-            color: AppColors.darkPurple.withValues(alpha: 0.4),
-            blurRadius: 25,
-            offset: const Offset(0, 15),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10)),
         ],
       ),
       child: Column(
         children: [
           const SizedBox(height: 30),
-          Container(
-            width: double.infinity,
-            height: 50,
-            color: Colors.black,
-          ),
+          Container(width: double.infinity, height: 50, color: Colors.black),
           const SizedBox(height: 20),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+            child: Row(
               children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    '829',
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
+                Expanded(
+                  flex: 3,
+                  child: Container(height: 40, decoration: BoxDecoration(color: Colors.white.withOpacity(0.8), borderRadius: BorderRadius.circular(4))),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'CVV',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.8),
-                    fontSize: 11,
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 1,
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+                    alignment: Alignment.center,
+                    child: const Text('829', style: TextStyle(fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
                   ),
                 ),
               ],
             ),
           ),
           const Spacer(),
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Valid Thru: 12/28',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text(
-                    'VISA',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      fontStyle: FontStyle.italic,
-                      color: Color(0xFF1A1F71),
-                    ),
-                  ),
-                ),
-              ],
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Align(
+              alignment: Alignment.bottomRight,
+              child: Text('VISA', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
             ),
           ),
         ],
@@ -640,34 +497,13 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.1),
-              blurRadius: 15,
-              offset: const Offset(0, 5),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 24),
-            ),
+            Icon(icon, color: color, size: 26),
             const SizedBox(height: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.darkPurple,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
           ],
         ),
       ),
@@ -675,194 +511,65 @@ class _WalletScreenState extends State<WalletScreen> with SingleTickerProviderSt
   }
 
   Widget _buildStatCard(String label, double amount, Color color, IconData icon) {
-    final currencyFormat = NumberFormat.currency(
-      locale: 'id_ID',
-      symbol: 'Rp ',
-      decimalDigits: 0,
-    );
-    
+    final currencyFormat = NumberFormat.compact(locale: 'id_ID');
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.15),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 15, offset: const Offset(0, 5))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 24),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              const SizedBox(width: 8),
+              Text(label, style: const TextStyle(color: AppColors.greyText, fontSize: 12, fontWeight: FontWeight.w600)),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.greyText,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            currencyFormat.format(amount),
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+            "Rp ${currencyFormat.format(amount)}",
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildLinkedCardItem(String bankName, String number, String initial, Color color) {
+  Widget _buildLinkedCardItem(String name, String info, String initial, Color color) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.1),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 10)],
       ),
       child: Row(
         children: [
           Container(
-            width: 56,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [color, color.withValues(alpha: 0.7)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
-                ),
-              ),
-            ),
+            width: 50, height: 36,
+            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
+            alignment: Alignment.center,
+            child: Text(initial, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
           ),
           const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  bankName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.darkPurple,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  number,
-                  style: const TextStyle(
-                    color: AppColors.greyText,
-                    fontSize: 12,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.greyLight,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.more_horiz_rounded,
-              color: AppColors.darkPurple,
-              size: 20,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAddCardButton() {
-    return GestureDetector(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Add New Card feature coming soon!'),
-            backgroundColor: AppColors.darkPurple,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-          ),
-        );
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 18),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppColors.primaryPink.withValues(alpha: 0.1),
-              AppColors.lightPeach.withValues(alpha: 0.1),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+              Text(info, style: const TextStyle(color: Colors.grey, fontSize: 12)),
             ],
           ),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: AppColors.primaryPink.withValues(alpha: 0.3),
-            width: 2,
-          ),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.add_card_rounded,
-              color: AppColors.primaryPink,
-              size: 24,
-            ),
-            SizedBox(width: 12),
-            Text(
-              'Add New Card',
-              style: TextStyle(
-                color: AppColors.primaryPink,
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-              ),
-            ),
-          ],
-        ),
+          const Spacer(),
+          const Icon(Icons.more_horiz_rounded, color: Colors.grey),
+        ],
       ),
     );
   }
