@@ -37,10 +37,17 @@ flutter:
     - assets/images/
     - assets/icons/
 
-# Konfigurasi Splash Screen
 flutter_native_splash:
   color: "#FF00B7" 
   image: assets/images/logo.png
+  
+  # Tambahkan ini agar logo tidak nempel ke pinggir (mencegah gepeng/terpotong)
+  branding: assets/images/logo.png 
+  color_dark: "#121212" 
+  image_dark: assets/images/logo.png
+
   android_12:
     image: assets/images/logo.png
     color: "#FF00B7"
+    # icon_background_color membungkus logo dalam lingkaran agar rapi
+    icon_background_color: "#FFFFFF"

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/colors.dart';
-import 'main_screen.dart'; // [1] Ensure this import is correct
+import 'main_screen.dart'; 
 import '../auth/login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -26,7 +26,7 @@ class _SplashScreenState extends State<SplashScreen>
       vsync: this,
     );
 
-    // Opacity Animation
+    // Animasi Fade In
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
@@ -34,7 +34,7 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
-    // Scale Animation
+    // Animasi Scale (Membesar sedikit biar dinamis)
     _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
@@ -42,11 +42,11 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
-    // Slide Animation
-    _slideAnimation = Tween<double>(begin: 20, end: 0).animate(
+    // Animasi Slide Teks (Naik ke atas)
+    _slideAnimation = Tween<double>(begin: 50, end: 0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.3, 0.8, curve: Curves.easeOutQuad),
+        curve: const Interval(0.3, 0.8, curve: Curves.easeOutCubic),
       ),
     );
 
@@ -56,33 +56,20 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _checkAuthAndNavigate() async {
-    // Wait for animation + delay
     await Future.delayed(const Duration(seconds: 3));
 
     if (!mounted) return;
 
     final session = Supabase.instance.client.auth.currentSession;
     
-    if (session != null) {
-      // [2] NAVIGATE TO MAIN SCREEN (Container for Bottom Nav)
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const MainScreen(), // Changed from DashboardScreen to MainScreen
-          transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const LoginScreen(),
-          transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
-    }
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => session != null ? const MainScreen() : const LoginScreen(),
+        transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
+        transitionDuration: const Duration(milliseconds: 800),
+      ),
+    );
   }
 
   @override
@@ -95,6 +82,8 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -109,73 +98,72 @@ class _SplashScreenState extends State<SplashScreen>
           child: AnimatedBuilder(
             animation: _controller,
             builder: (context, child) {
-              return Opacity(
-                opacity: _fadeAnimation.value,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // LOGO IMAGE
-                    Transform.scale(
-                      scale: _scaleAnimation.value,
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: AppColors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
-                              blurRadius: 30,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: Image.asset(
-                          'assets/images/logo.png',
-                          width: 80,
-                          height: 80,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(
-                              Icons.wallet,
-                              size: 60,
-                              color: AppColors.primaryPink,
-                            );
-                          },
-                        ),
+              return Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // --- LOGO BESAR (Tanpa Lingkaran) ---
+                  ScaleTransition(
+                    scale: _scaleAnimation,
+                    child: FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        width: 180, // ✅ Ukuran Diperbesar (Sesuaikan jika kurang besar)
+                        height: 180,
+                        fit: BoxFit.contain, // ✅ Menjaga proporsi agar tidak gepeng
+                        color: Colors.white, // ✅ Logo jadi Putih Bersih di atas Pink
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
+                            Icons.account_balance_wallet_rounded,
+                            size: 100,
+                            color: Colors.white,
+                          );
+                        },
                       ),
                     ),
-                    const SizedBox(height: 30),
-                    
-                    // TITLE TEXT
-                    Transform.translate(
-                      offset: Offset(0, _slideAnimation.value),
-                      child: const Column(
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // --- TEKS JUDUL ---
+                  Transform.translate(
+                    offset: Offset(0, _slideAnimation.value),
+                    child: FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: Column(
                         children: [
-                          Text(
+                          const Text(
                             'Pinky Pay',
                             style: TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.white,
-                              letterSpacing: 1.5,
-                              fontFamily: 'Poppins',
+                              fontSize: 36, // Font diperbesar
+                              fontWeight: FontWeight.w900, // Lebih tebal
+                              color: Colors.white,
+                              letterSpacing: 2.0,
+                              fontFamily: 'Poppins', 
+                              shadows: [
+                                Shadow(
+                                  offset: Offset(0, 4),
+                                  blurRadius: 10.0,
+                                  color: Colors.black26,
+                                ),
+                              ],
                             ),
                           ),
-                          SizedBox(height: 8),
+                          const SizedBox(height: 8),
                           Text(
                             'Smart Way to Pay',
                             style: TextStyle(
                               fontSize: 16,
-                              fontWeight: FontWeight.w400,
-                              color: Color(0xFFFce4ec),
-                              letterSpacing: 1.0,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withOpacity(0.9),
+                              letterSpacing: 1.2,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               );
             },
           ),
