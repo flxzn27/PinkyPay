@@ -4,7 +4,8 @@ class UserModel {
   final String email;
   final double balance;
   final String avatarUrl;
-  final DateTime createdAt; // ← TAMBAHKAN INI
+  final DateTime createdAt;
+  final String? pin; 
 
   UserModel({
     required this.id,
