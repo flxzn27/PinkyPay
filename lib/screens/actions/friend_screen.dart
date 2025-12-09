@@ -4,7 +4,7 @@ import '../../config/colors.dart';
 import '../../models/friend_model.dart';
 import '../../models/user_model.dart';
 import '../../services/friend_service.dart';
-import 'chat_screen.dart'; // Nanti kita buat file ini
+import 'chat_screen.dart'; // [1] PASTIKAN INI DIIMPORT
 
 class FriendScreen extends StatefulWidget {
   const FriendScreen({super.key});
@@ -15,14 +15,23 @@ class FriendScreen extends StatefulWidget {
 
 class _FriendScreenState extends State<FriendScreen> {
   final FriendService _friendService = FriendService();
-  final String _myId = Supabase.instance.client.auth.currentUser!.id;
+  
+  // Mengambil ID user dengan aman
+  late final String _myId;
+
+  @override
+  void initState() {
+    super.initState();
+    // Inisialisasi ID di initState agar aman
+    _myId = Supabase.instance.client.auth.currentUser!.id;
+  }
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: Colors.white, // Background putih bersih
+        backgroundColor: Colors.white,
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
@@ -44,7 +53,7 @@ class _FriendScreenState extends State<FriendScreen> {
               icon: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryPink.withValues(alpha: 0.1),
+                  color: AppColors.primaryPink.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.search_rounded, color: AppColors.primaryPink, size: 20),
@@ -58,7 +67,6 @@ class _FriendScreenState extends State<FriendScreen> {
             ),
             const SizedBox(width: 16),
           ],
-          // ✨ BAGIAN TAB BAR YANG DIPERCANTIK ✨
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(60),
             child: Container(
@@ -69,11 +77,11 @@ class _FriendScreenState extends State<FriendScreen> {
               ),
               child: TabBar(
                 indicator: BoxDecoration(
-                  color: AppColors.primaryPink, // Warna PinkyPay!
+                  color: AppColors.primaryPink,
                   borderRadius: BorderRadius.circular(25),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryPink.withValues(alpha: 0.3),
+                      color: AppColors.primaryPink.withOpacity(0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -83,7 +91,7 @@ class _FriendScreenState extends State<FriendScreen> {
                 unselectedLabelColor: Colors.grey,
                 labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 indicatorSize: TabBarIndicatorSize.tab,
-                dividerColor: Colors.transparent, // Hilangkan garis pemisah default
+                dividerColor: Colors.transparent,
                 tabs: const [
                   Tab(text: "My Friends"),
                   Tab(text: "Requests"),
@@ -102,84 +110,6 @@ class _FriendScreenState extends State<FriendScreen> {
     );
   }
 
-  // ... (Kode _buildMyFriendsTab, _buildRequestsTab, dll tetap sama,
-  // TAPI di bagian _buildModernFriendItem kita ubah tombol actionnya ke Chat)
-
-  Widget _buildModernFriendItem(UserModel profile) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.greyLight), // Border tipis rapi
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        leading: Stack(
-          children: [
-            CircleAvatar(
-              radius: 25,
-              backgroundColor: AppColors.lightPeach,
-              child: Text(
-                profile.name[0].toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryPink,
-                ),
-              ),
-            ),
-            // Indikator Online (Hiasan visual)
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: Colors.greenAccent,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-              ),
-            )
-          ],
-        ),
-        title: Text(
-          profile.name,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold, 
-            fontSize: 16,
-            color: AppColors.darkPurple,
-          ),
-        ),
-        subtitle: Text(
-          profile.email,
-          style: TextStyle(color: Colors.grey[500], fontSize: 12),
-        ),
-        // TOMBOL CHAT BARU
-        trailing: IconButton(
-          style: IconButton.styleFrom(
-            backgroundColor: AppColors.primaryPink.withValues(alpha: 0.1),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          icon: const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.primaryPink, size: 20),
-          onPressed: () {
-            // NAVIGASI KE CHAT SCREEN
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ChatScreen(friend: profile),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-  
-  // ... (Sisa kode seperti _buildRequestsTab, SearchDelegate, dll copy dari sebelumnya)
-  
-  // --- TAB 1: DAFTAR TEMAN (Copy paste code sebelumnya disini) ---
   Widget _buildMyFriendsTab() {
     return FutureBuilder<List<FriendModel>>(
       future: _friendService.getMyFriends(),
@@ -207,14 +137,88 @@ class _FriendScreenState extends State<FriendScreen> {
             final isMeSender = friendship.sender?.id == _myId;
             final friendProfile = isMeSender ? friendship.receiver : friendship.sender;
 
-            return _buildModernFriendItem(friendProfile!);
+            // [FIX] Cek Null Safety
+            if (friendProfile == null) return const SizedBox();
+
+            return _buildModernFriendItem(friendProfile);
           },
         );
       },
     );
   }
 
-  // --- TAB 2: REQUEST MASUK (Copy paste code sebelumnya disini) ---
+  Widget _buildModernFriendItem(UserModel profile) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.greyLight),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        leading: Stack(
+          children: [
+            CircleAvatar(
+              radius: 25,
+              backgroundColor: AppColors.lightPeach,
+              // Tampilkan inisial nama jika avatar kosong
+              child: Text(
+                profile.name.isNotEmpty ? profile.name[0].toUpperCase() : '?',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryPink,
+                ),
+              ),
+            ),
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: Colors.greenAccent,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+              ),
+            )
+          ],
+        ),
+        title: Text(
+          profile.name,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold, 
+            fontSize: 16,
+            color: AppColors.darkPurple,
+          ),
+        ),
+        subtitle: Text(
+          profile.email,
+          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+        ),
+        // [2] UPDATE TOMBOL CHAT (SEKARANG AKTIF)
+        trailing: IconButton(
+          style: IconButton.styleFrom(
+            backgroundColor: AppColors.primaryPink.withOpacity(0.1),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          icon: const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.primaryPink, size: 20),
+          onPressed: () {
+            // Langsung buka Chat Screen
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ChatScreen(friend: profile),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildRequestsTab() {
     return FutureBuilder<List<FriendModel>>(
       future: _friendService.getIncomingRequests(),
@@ -251,10 +255,10 @@ class _FriendScreenState extends State<FriendScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.primaryPink.withValues(alpha: 0.1), width: 1.5),
+        border: Border.all(color: AppColors.primaryPink.withOpacity(0.1), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryPink.withValues(alpha: 0.05),
+            color: AppColors.primaryPink.withOpacity(0.05),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -268,7 +272,7 @@ class _FriendScreenState extends State<FriendScreen> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: AppColors.lightBlue.withValues(alpha: 0.1),
+                  color: AppColors.lightBlue.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.person_add_rounded, color: AppColors.lightBlue),
@@ -302,8 +306,9 @@ class _FriendScreenState extends State<FriendScreen> {
               Expanded(
                 child: TextButton(
                   onPressed: () async {
+                    // Logic Tolak
                     await _friendService.deleteFriendship(request.id);
-                    setState(() {});
+                    setState(() {}); // Refresh UI
                   },
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -317,8 +322,9 @@ class _FriendScreenState extends State<FriendScreen> {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () async {
+                    // Logic Terima
                     await _friendService.acceptRequest(request.id);
-                    setState(() {});
+                    setState(() {}); // Refresh UI
                   },
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -350,13 +356,13 @@ class _FriendScreenState extends State<FriendScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primaryPink.withValues(alpha: 0.1),
+                    color: AppColors.primaryPink.withOpacity(0.1),
                     blurRadius: 30,
                     offset: const Offset(0, 10),
                   )
                 ]
               ),
-              child: Icon(icon, size: 64, color: AppColors.primaryPink.withValues(alpha: 0.5)),
+              child: Icon(icon, size: 64, color: AppColors.primaryPink.withOpacity(0.5)),
             ),
             const SizedBox(height: 24),
             Text(
@@ -377,6 +383,7 @@ class _FriendScreenState extends State<FriendScreen> {
   }
 }
 
+// SEARCH DELEGATE (Tetap sama, tidak perlu diubah)
 class FriendSearchDelegate extends SearchDelegate {
   final FriendService friendService;
 
@@ -448,7 +455,7 @@ class FriendSearchDelegate extends SearchDelegate {
               child: ListTile(
                 leading: CircleAvatar(
                   backgroundColor: AppColors.primaryPink,
-                  child: Text(user.name[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text(user.name.isNotEmpty ? user.name[0].toUpperCase() : '?', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
                 title: Text(user.name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
                 subtitle: Text(user.email),
@@ -457,13 +464,17 @@ class FriendSearchDelegate extends SearchDelegate {
                   onPressed: () async {
                     try {
                       await friendService.sendFriendRequest(user.id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Request dikirim ke ${user.name} ✅"), backgroundColor: Colors.green),
-                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Request dikirim ke ${user.name} ✅"), backgroundColor: Colors.green),
+                        );
+                      }
                     } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Gagal: $e"), backgroundColor: Colors.red),
-                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Gagal: $e"), backgroundColor: Colors.red),
+                        );
+                      }
                     }
                   },
                 ),

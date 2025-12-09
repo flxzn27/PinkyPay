@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:image_picker/image_picker.dart'; // Tambahkan image_picker
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/colors.dart';
-import 'payment_screen.dart'; // Pastikan import ini ada
+import 'payment_screen.dart';
+import 'friend_screen.dart';
+import '../../widgets/pinky_popup.dart';
 
 class ScanQrScreen extends StatefulWidget {
   const ScanQrScreen({super.key});
@@ -209,74 +212,169 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
     // Cegah scan berulang kali dengan pause kamera
     _controller.stop(); 
 
-    if (code.startsWith('pinkypay:transfer_to:')) {
-      final email = code.split(':')[2];
-      
-      // Navigasi ke PaymentScreen
-      // Kita perlu cara untuk mengirim data ke PaymentScreen. 
-      // Jika PaymentScreen belum di-update untuk menerima argumen,
-      // kita bisa passing data lewat constructor (yang sudah kita update sebelumnya).
-      
-      // Asumsi PaymentScreen sudah diupdate untuk menerima initialRecipientEmail
-      // Tetapi karena PaymentScreen butuh callback onPayment dan onAddTransaction,
-      // idealnya navigasi ini dilakukan dari MainScreen atau kita pass dummy callback 
-      // (yang mana kurang ideal).
-      
-      // SOLUSI: Tampilkan dialog konfirmasi dulu, lalu pop dengan result.
-      // Atau jika PaymentScreen bisa diakses langsung, kita push.
-      
-      // Di sini saya akan menggunakan pendekatan Dialog -> Pop with Result 
-      // ATAU Push Replacement jika PaymentScreen mandiri.
-      // Mengingat struktur navigasi, kita akan coba Push MaterialPageRoute.
-      // Namun PaymentScreen butuh callback. 
-      
-      // SEMENTARA: Tampilkan SnackBar dan Dialog Konfirmasi.
-      
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text("QR Detected"),
-          content: Text("Transfer to $email?"),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _controller.start(); // Resume scanning
-              },
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx); // Close dialog
-                Navigator.pop(context); // Close Scanner
-                
-                // TODO: Idealnya di sini kita kirim data balik ke halaman sebelumnya
-                // atau gunakan State Management untuk menavigasi ke PaymentScreen.
-                // Untuk sekarang, kita beri info ke user.
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Please go to 'Send' menu and enter: $email")),
-                );
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink),
-              child: const Text("OK", style: TextStyle(color: Colors.white)),
-            ),
-          ],
+    try {
+      // Format 1: Transfer QR Code
+      if (code.startsWith('pinkypay:transfer_to:')) {
+        final parts = code.split(':');
+        if (parts.length < 3) {
+          _showError("Invalid Transfer QR Code Format");
+          return;
+        }
+        
+        final email = parts[2];
+        _navigateToPayment(email);
+
+      // Format 2: Add Friend QR Code
+      } else if (code.startsWith('pinkypay:add_friend:')) {
+        final parts = code.split(':');
+        if (parts.length < 3) {
+          _showError("Invalid Add Friend QR Code Format");
+          return;
+        }
+        
+        final email = parts[2];
+        _navigateToAddFriend(email);
+
+      } else {
+        _showError("Invalid PinkyPay QR Code");
+      }
+    } catch (e) {
+      _showError("Error reading QR Code: ${e.toString()}");
+    }
+  }
+
+  /// Navigate ke Payment Screen dengan recipient email dari QR
+  void _navigateToPayment(String email) {
+    // Close scanner dan navigate
+    Navigator.pop(context);
+    
+    // Kita perlu mendapatkan current balance dari parent widget
+    // Karena parent widget (root/main) memiliki state dengan balance
+    // Kita bisa pass callback via Navigator result
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PaymentScreen(
+          currentBalance: 1000000, // Dummy value - parent harus pass yang real
+          onPayment: (amount, isDebit) {
+            // Dummy callback
+          },
+          onAddTransaction: (transaction) {
+            // Dummy callback
+          },
+          initialRecipientEmail: email,
         ),
+      ),
+    ).then((_) {
+      // Jika kembali dari payment, resume scanning
+      _controller.start();
+    });
+  }
+
+  /// Navigate ke Add Friend Screen dengan email dari QR
+  void _navigateToAddFriend(String email) {
+    // Tampilkan konfirmasi dialog dulu sebelum add friend
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Add Friend"),
+        content: Text("Add $email as a friend?"),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _controller.start(); // Resume scanning
+            },
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _addFriendFromQr(email);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink),
+            child: const Text("Add", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Proses add friend dari QR code
+  Future<void> _addFriendFromQr(String email) async {
+    try {
+      final supabase = Supabase.instance.client;
+      final currentUserId = supabase.auth.currentUser!.id;
+
+      // Get target user by email
+      final targetUserResponse = await supabase
+          .from('profiles')
+          .select('id, username')
+          .eq('email', email)
+          .single();
+
+      final targetUserId = targetUserResponse['id'];
+      final targetUsername = targetUserResponse['username'] ?? email;
+
+      // Check if already friends
+      final existingFriend = await supabase
+          .from('friends')
+          .select()
+          .eq('user_id', currentUserId)
+          .eq('friend_id', targetUserId);
+
+      if (existingFriend.isNotEmpty) {
+        PinkyPopUp.show(
+          context,
+          type: PopUpType.warning,
+          title: "Already Friends",
+          message: "Kamu udah berteman dengan $targetUsername",
+        );
+        Navigator.pop(context);
+        return;
+      }
+
+      // Add friend
+      await supabase.from('friends').insert({
+        'user_id': currentUserId,
+        'friend_id': targetUserId,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      PinkyPopUp.show(
+        context,
+        type: PopUpType.success,
+        title: "Friend Added",
+        message: "$targetUsername ditambahkan ke Pinky Circle mu!",
       );
 
-    } else {
-      // Jika QR salah, resume kamera lagi setelah 2 detik
-      _showError("Invalid PinkyPay QR Code");
+      // Close scanner and go back
+      Navigator.pop(context);
+    } catch (e) {
+      PinkyPopUp.show(
+        context,
+        type: PopUpType.error,
+        title: "Error",
+        message: "Gagal menambah teman: ${e.toString()}",
+      );
+      _controller.start();
     }
   }
   
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 2),
+      ),
     );
+    
+    // Auto resume scanning after 2 seconds
     Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) _controller.start();
+      if (mounted) {
+        _controller.start();
+      }
     });
   }
 

@@ -6,25 +6,38 @@ import '../../models/user_model.dart';
 import '../../models/transaction_model.dart';
 import '../../widgets/transaction_item.dart';
 import '../../services/transaction_service.dart';
+// Import Widget Balance Card
+import '../../widgets/balance_card.dart';
+// Import Halaman Aksi
 import '../actions/topup_screen.dart';
 import '../actions/payment_screen.dart';
 import '../actions/split_pay_screen.dart';
-import '../actions/friend_screen.dart'; // ✅ Import halaman FriendScreen
+import '../actions/friend_screen.dart';
 import '../auth/login_screen.dart';
+// Import Pop Up & Notification
+import '../../widgets/pinky_popup.dart';
+import '../notification/notification_screen.dart';
+// Import Halaman List Tagihan
+import '../actions/split_bill_list_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  // [PENTING] Tidak ada underscore agar bisa diakses MainScreen
+  State<DashboardScreen> createState() => DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
+// [PENTING] Tidak ada underscore (Public Class)
+class DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
   // Data State
   UserModel? user;
   List<TransactionModel> transactions = [];
   bool _isLoading = true;
   bool _isBalanceVisible = true;
+  
+  // Status Notifikasi (Realtime)
+  bool _hasUnreadNotifications = false; 
   
   // Animation
   late AnimationController _animationController;
@@ -38,12 +51,12 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   void initState() {
     super.initState();
     _initAnimation();
-    _fetchUserData();
+    fetchUserData(); // Panggil fungsi public
   }
 
   void _initAnimation() {
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 800),
       vsync: this,
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -58,22 +71,23 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     super.dispose();
   }
 
-  // 1. Ambil Data User & Transaksi Real-time
-  Future<void> _fetchUserData() async {
+  // [PENTING] Public Function (Tanpa _) agar bisa dipanggil dari MainScreen
+  Future<void> fetchUserData() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
-      // print("📱 DEBUG: CURRENT USER ID = $userId");
       if (userId == null) return;
 
+      // Request Data Profile, Transaksi, dan Cek Notifikasi secara paralel
       final results = await Future.wait<dynamic>([
         _supabase.from('profiles').select().eq('id', userId).maybeSingle(),
         _transactionService.getTransactions(),
+        // Hitung notifikasi yang belum dibaca
+        _supabase.from('notifications').select().eq('user_id', userId).eq('is_read', false).count(), 
       ]);
 
       final profileData = results[0] as Map<String, dynamic>?;
 
       if (profileData == null) {
-        debugPrint("⚠️ Profile tidak ditemukan untuk userId: $userId");
         if (mounted) {
           setState(() {
             user = null;
@@ -85,11 +99,16 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       }
 
       final transactionData = results[1] as List<TransactionModel>;
+      
+      // Hasil count notifikasi
+      final unreadCountResponse = results[2]; 
+      final bool hasNotif = (unreadCountResponse?.count ?? 0) > 0;
 
       if (mounted) {
         setState(() {
           user = UserModel.fromJson(profileData);
           transactions = transactionData;
+          _hasUnreadNotifications = hasNotif; // Update status dari database
           _isLoading = false;
         });
       }
@@ -99,19 +118,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     }
   }
 
-  // 2. Logika Logout
-  Future<void> _logout() async {
-    await _supabase.auth.signOut();
-    if (mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false,
-      );
-    }
-  }
-
-  // 3. Greeting Otomatis
+  // Greeting Otomatis
   String get _greeting {
     var hour = DateTime.now().hour;
     if (hour < 12) return 'Good Morning';
@@ -128,8 +135,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     return '🌙';
   }
 
-  // Callback Update Saldo Lokal
-  void _updateBalance(double amount, bool isIncome) {
+  // [PENTING] Public Function (Tanpa _) agar bisa dipanggil dari ScanQrScreen via MainScreen
+  void updateBalance(double amount, bool isIncome) {
     if (user == null) return;
     setState(() {
       double newBalance = isIncome 
@@ -137,21 +144,84 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           : user!.balance - amount;
       user = user!.copyWith(balance: newBalance);
     });
-    _fetchUserData();
+    
+    PinkyPopUp.show(
+      context,
+      type: PopUpType.success,
+      title: "Berhasil!",
+      message: isIncome ? "Saldo berhasil ditambahkan" : "Pembayaran berhasil",
+    );
+    
+    fetchUserData(); 
   }
 
-  void _addTransaction(TransactionModel transaction) {
-    _fetchUserData();
+  // [PENTING] Public Function (Tanpa _)
+  void addTransaction(TransactionModel transaction) {
+    fetchUserData();
+  }
+
+  // Logic Pop Up Menu Split Bill
+  void _showSplitBillOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: Colors.white,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          height: 250,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("Menu Patungan (Split Bill)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+              const SizedBox(height: 24),
+              
+              // Opsi 1: Buat Tagihan Baru
+              ListTile(
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => SplitPayScreen(
+                    currentBalance: user?.balance ?? 0, 
+                    onSplitPay: updateBalance, 
+                    onAddTransaction: addTransaction
+                  )));
+                },
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: AppColors.lightBlue.withOpacity(0.1), shape: BoxShape.circle),
+                  child: const Icon(Icons.add_rounded, color: AppColors.lightBlue),
+                ),
+                title: const Text("Buat Tagihan Baru", style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text("Talangin teman-temanmu"),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+              ),
+              
+              const SizedBox(height: 8),
+
+              // Opsi 2: Lihat Tagihan Masuk
+              ListTile(
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SplitBillListScreen()));
+                },
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), shape: BoxShape.circle),
+                  child: const Icon(Icons.receipt_long_rounded, color: Colors.orange),
+                ),
+                title: const Text("Tagihan Masuk", style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text("Bayar hutang ke teman"),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(
-      locale: 'id_ID', 
-      symbol: 'Rp ', 
-      decimalDigits: 0
-    );
-
     if (_isLoading) {
       return Scaffold(
         body: Container(
@@ -165,15 +235,16 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
 
     return Scaffold(
       backgroundColor: AppColors.greyLight,
+      // FAB SUDAH DIHAPUS DARI SINI
       body: RefreshIndicator(
-        onRefresh: _fetchUserData,
+        onRefresh: fetchUserData,
         color: AppColors.primaryPink,
         child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
-            // MODERN APP BAR
+            // APP BAR
             SliverAppBar(
-              expandedHeight: 280,
+              expandedHeight: 360, 
               floating: false,
               pinned: true,
               backgroundColor: AppColors.primaryPink,
@@ -200,7 +271,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                     Text(
                                       '$_greeting $_greetingEmoji',
                                       style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.9),
+                                        color: Colors.white.withOpacity(0.9),
                                         fontSize: 14,
                                         fontWeight: FontWeight.w500,
                                       ),
@@ -216,126 +287,82 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                                     ),
                                   ],
                                 ),
-                                // Profile Menu
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.2),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: PopupMenuButton<String>(
-                                    icon: const Icon(Icons.person_rounded, color: Colors.white, size: 28),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
+                                // Tombol Notifikasi
+                                GestureDetector(
+                                  onTap: () async {
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                                    );
+                                    
+                                    // Saat kembali, refresh data untuk update badge
+                                    if (mounted) {
+                                      fetchUserData();
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(14),
                                     ),
-                                    offset: const Offset(0, 50),
-                                    onSelected: (value) {
-                                      if (value == 'logout') _logout();
-                                    },
-                                    itemBuilder: (context) => [
-                                      const PopupMenuItem(
-                                        value: 'profile',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.person_rounded, color: AppColors.primaryPink),
-                                            SizedBox(width: 12),
-                                            Text("My Profile"),
-                                          ],
+                                    child: Stack(
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        const Icon(
+                                          Icons.notifications_rounded, 
+                                          color: Colors.white, 
+                                          size: 26
                                         ),
-                                      ),
-                                      const PopupMenuItem(
-                                        value: 'settings',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.settings_rounded, color: AppColors.lightBlue),
-                                            SizedBox(width: 12),
-                                            Text("Settings"),
-                                          ],
-                                        ),
-                                      ),
-                                      const PopupMenuItem(
-                                        value: 'logout',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.logout_rounded, color: Colors.red),
-                                            SizedBox(width: 12),
-                                            Text("Logout"),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
+                                        // Badge Merah (Hanya muncul jika ada notif baru)
+                                        if (_hasUnreadNotifications)
+                                          Positioned(
+                                            right: 0,
+                                            top: 0,
+                                            child: Container(
+                                              width: 10,
+                                              height: 10,
+                                              decoration: BoxDecoration(
+                                                color: Colors.redAccent,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(color: AppColors.primaryPink, width: 1.5),
+                                                boxShadow: [
+                                                   const BoxShadow(color: Colors.black26, blurRadius: 2)
+                                                ]
+                                              ),
+                                            ),
+                                          )
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                             
-                            const SizedBox(height: 32),
+                            const SizedBox(height: 24),
                             
                             // Balance Card
-                            Container(
-                              padding: const EdgeInsets.all(24),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(24),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.15),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text(
-                                        'Total Balance',
-                                        style: TextStyle(
-                                          color: AppColors.greyText,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            _isBalanceVisible = !_isBalanceVisible;
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.lightPeach,
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Icon(
-                                            _isBalanceVisible 
-                                                ? Icons.visibility_rounded 
-                                                : Icons.visibility_off_rounded,
-                                            color: AppColors.primaryPink,
-                                            size: 20,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    _isBalanceVisible 
-                                        ? currencyFormat.format(user?.balance ?? 0)
-                                        : 'Rp •••••••',
-                                    style: const TextStyle(
-                                      color: AppColors.darkPurple,
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            BalanceCard(
+                              balance: user?.balance ?? 0,
+                              isVisible: _isBalanceVisible,
+                              onToggleVisibility: () {
+                                setState(() {
+                                  _isBalanceVisible = !_isBalanceVisible;
+                                });
+                              },
+                              onTopUp: () {
+                                Navigator.push(
+                                  context, 
+                                  MaterialPageRoute(
+                                    builder: (_) => TopUpScreen(
+                                      onTopUp: updateBalance, 
+                                      onAddTransaction: addTransaction
+                                    )
+                                  )
+                                );
+                              },
                             ),
+
                           ],
                         ),
                       ),
@@ -355,7 +382,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryPink.withValues(alpha: 0.08),
+                      color: AppColors.primaryPink.withOpacity(0.08),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
                     ),
@@ -366,11 +393,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   children: [
                     const Text(
                       'Quick Actions',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.darkPurple,
-                      ),
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -380,57 +403,27 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                           icon: Icons.add_circle_outline_rounded,
                           label: "Top Up",
                           color: AppColors.primaryPink,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => TopUpScreen(
-                                onTopUp: _updateBalance,
-                                onAddTransaction: _addTransaction,
-                              ),
-                            ),
-                          ),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TopUpScreen(onTopUp: updateBalance, onAddTransaction: addTransaction))),
                         ),
                         _buildModernMenuItem(
                           icon: Icons.arrow_upward_rounded,
                           label: "Send",
                           color: AppColors.lightBlue,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => PaymentScreen(
-                                currentBalance: user?.balance ?? 0,
-                                onPayment: _updateBalance,
-                                onAddTransaction: _addTransaction,
-                              ),
-                            ),
-                          ),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentScreen(currentBalance: user?.balance ?? 0, onPayment: updateBalance, onAddTransaction: addTransaction))),
                         ),
+                        // ✅ SPLIT BILL (Panggil Menu Pilihan)
                         _buildModernMenuItem(
-                          icon: Icons.group_rounded,
-                          label: "Split",
+                          icon: Icons.call_split_rounded, 
+                          label: "Split Bill",
                           color: AppColors.darkPurple,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => SplitPayScreen(
-                                currentBalance: user?.balance ?? 0,
-                                onSplitPay: _updateBalance,
-                                onAddTransaction: _addTransaction,
-                              ),
-                            ),
-                          ),
+                          onTap: _showSplitBillOptions, 
                         ),
-                        // ✅ TOMBOL FRIEND YANG SUDAH DI-UPDATE
+                        // ✅ ADD FRIEND
                         _buildModernMenuItem(
-                          icon: Icons.people_rounded,
-                          label: "Friend",
-                          color: const Color(0xFFFFB74D),
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const FriendScreen(),
-                            ),
-                          ),
+                          icon: Icons.person_add_rounded,
+                          label: "Add Friend",
+                          color: const Color(0xFFFFB74D), 
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FriendScreen())),
                         ),
                       ],
                     ),
@@ -439,7 +432,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               ),
             ),
 
-            // PROMO BANNER (Optional)
+            // PROMO BANNER
             SliverToBoxAdapter(
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -457,72 +450,37 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryPink.withValues(alpha: 0.2),
+                        color: AppColors.primaryPink.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: const Icon(
-                        Icons.card_giftcard_rounded,
-                        color: AppColors.primaryPink,
-                        size: 32,
-                      ),
+                      child: const Icon(Icons.card_giftcard_rounded, color: AppColors.primaryPink, size: 32),
                     ),
                     const SizedBox(width: 16),
                     const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Special Promo! 🎉',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.darkPurple,
-                            ),
-                          ),
+                          Text('Special Promo! 🎉', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
                           SizedBox(height: 4),
-                          Text(
-                            'Get cashback up to 20%',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.greyText,
-                            ),
-                          ),
+                          Text('Get cashback up to 20%', style: TextStyle(fontSize: 12, color: AppColors.greyText)),
                         ],
                       ),
                     ),
-                    const Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      color: AppColors.primaryPink,
-                      size: 20,
-                    ),
+                    const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.primaryPink, size: 20),
                   ],
                 ),
               ),
             ),
 
-            // TRANSACTION HISTORY HEADER
+            // HISTORY HEADER
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(24, 24, 24, 16),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'Recent Transactions',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.darkPurple,
-                      ),
-                    ),
-                    Text(
-                      'See All',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primaryPink,
-                      ),
-                    ),
+                    Text('Recent Transactions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+                    Text('See All', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primaryPink)),
                   ],
                 ),
               ),
@@ -537,33 +495,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                         children: [
                           Container(
                             padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: AppColors.greyLight,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.receipt_long_rounded,
-                              size: 64,
-                              color: AppColors.greyText.withValues(alpha: 0.5),
-                            ),
+                            decoration: BoxDecoration(color: AppColors.greyLight, shape: BoxShape.circle),
+                            child: Icon(Icons.receipt_long_rounded, size: 64, color: AppColors.greyText.withOpacity(0.5)),
                           ),
                           const SizedBox(height: 16),
-                          const Text(
-                            "No transactions yet",
-                            style: TextStyle(
-                              color: AppColors.greyText,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                          const Text("No transactions yet", style: TextStyle(color: AppColors.greyText, fontSize: 16, fontWeight: FontWeight.w500)),
                           const SizedBox(height: 8),
-                          const Text(
-                            "Start your first transaction!",
-                            style: TextStyle(
-                              color: AppColors.greyText,
-                              fontSize: 14,
-                            ),
-                          ),
+                          const Text("Start your first transaction!", style: TextStyle(color: AppColors.greyText, fontSize: 14)),
                         ],
                       ),
                     ),
@@ -603,17 +541,14 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             width: 56,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [
-                  color,
-                  color.withValues(alpha: 0.7),
-                ],
+                colors: [color, color.withOpacity(0.7)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: color.withValues(alpha: 0.3),
+                  color: color.withOpacity(0.3),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
                 ),
@@ -624,11 +559,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           const SizedBox(height: 10),
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppColors.darkPurple,
-            ),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.darkPurple),
           ),
         ],
       ),

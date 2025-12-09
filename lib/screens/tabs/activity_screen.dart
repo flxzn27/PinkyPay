@@ -94,6 +94,10 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
         .fold(0, (sum, item) => sum + item.amount);
   }
 
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
   @override
   Widget build(BuildContext context) {
     final currencyFormat = NumberFormat.currency(
@@ -104,265 +108,269 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
 
     return Scaffold(
       backgroundColor: AppColors.greyLight,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          // MODERN APP BAR WITH GRADIENT
-          SliverAppBar(
-            expandedHeight: 200,
-            floating: false,
-            pinned: true,
-            backgroundColor: AppColors.primaryPink,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: const Icon(
-                                  Icons.analytics_rounded,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              const Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Activity',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                    ),
+      body: RefreshIndicator(
+        onRefresh: _fetchTransactions,
+        color: AppColors.primaryPink,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          slivers: [
+            // MODERN APP BAR WITH GRADIENT
+            SliverAppBar(
+              expandedHeight: 200,
+              floating: false,
+              pinned: true,
+              backgroundColor: AppColors.primaryPink,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: const BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                  ),
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(16),
                                   ),
-                                  Text(
-                                    'Track your transactions',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                    ),
+                                  child: const Icon(
+                                    Icons.analytics_rounded,
+                                    color: Colors.white,
+                                    size: 28,
                                   ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ],
+                                ),
+                                const SizedBox(width: 16),
+                                const Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Activity',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Track your transactions',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // STATISTICS CARDS
-          SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.all(24),
-              child: _isLoading
-                  ? const SizedBox()
-                  : Row(
-                      children: [
-                        Expanded(
-                          child: _buildStatCard(
-                            'Income',
-                            currencyFormat.format(_calculateIncome()),
-                            Icons.trending_up_rounded,
-                            const Color(0xFF4CAF50),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildStatCard(
-                            'Expense',
-                            currencyFormat.format(_calculateExpense()),
-                            Icons.trending_down_rounded,
-                            const Color(0xFFEF5350),
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ),
-
-          // FILTER TABS
-          SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primaryPink.withValues(alpha: 0.1),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  _buildModernFilterTab('All', Icons.list_rounded),
-                  _buildModernFilterTab('Income', Icons.arrow_downward_rounded),
-                  _buildModernFilterTab('Expense', Icons.arrow_upward_rounded),
-                ],
-              ),
-            ),
-          ),
-
-          // FILTERED TOTAL (if not showing all)
-          if (!_isLoading && _selectedFilter != 'All' && _filteredTransactions.isNotEmpty)
+            // STATISTICS CARDS
             SliverToBoxAdapter(
               child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                padding: const EdgeInsets.all(20),
+                margin: const EdgeInsets.all(24),
+                child: _isLoading
+                    ? const SizedBox()
+                    : Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatCard(
+                              'Income',
+                              currencyFormat.format(_calculateIncome()),
+                              Icons.trending_up_rounded,
+                              const Color(0xFF4CAF50),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildStatCard(
+                              'Expense',
+                              currencyFormat.format(_calculateExpense()),
+                              Icons.trending_down_rounded,
+                              const Color(0xFFEF5350),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+
+            // FILTER TABS
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: _selectedFilter == 'Income'
-                        ? [const Color(0xFFE8F5E9), const Color(0xFFC8E6C9)]
-                        : [const Color(0xFFFFEBEE), const Color(0xFFFFCDD2)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: (_selectedFilter == 'Income' 
-                          ? const Color(0xFF4CAF50) 
-                          : const Color(0xFFEF5350)).withValues(alpha: 0.2),
+                      color: AppColors.primaryPink.withOpacity(0.1),
                       blurRadius: 15,
                       offset: const Offset(0, 5),
                     ),
                   ],
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Total $_selectedFilter',
-                          style: TextStyle(
-                            color: _selectedFilter == 'Income'
-                                ? const Color(0xFF2E7D32)
-                                : const Color(0xFFC62828),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          currencyFormat.format(_calculateTotal()),
-                          style: TextStyle(
-                            color: _selectedFilter == 'Income'
-                                ? const Color(0xFF1B5E20)
-                                : const Color(0xFFB71C1C),
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        _selectedFilter == 'Income'
-                            ? Icons.arrow_downward_rounded
-                            : Icons.arrow_upward_rounded,
-                        color: _selectedFilter == 'Income'
-                            ? const Color(0xFF4CAF50)
-                            : const Color(0xFFEF5350),
-                        size: 32,
-                      ),
-                    ),
+                    _buildModernFilterTab('All', Icons.list_rounded),
+                    _buildModernFilterTab('Income', Icons.arrow_downward_rounded),
+                    _buildModernFilterTab('Expense', Icons.arrow_upward_rounded),
                   ],
                 ),
               ),
             ),
 
-          // TRANSACTION LIST HEADER
-          if (!_isLoading && _filteredTransactions.isNotEmpty)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(24, 16, 24, 8),
-                child: Text(
-                  'Transactions',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.darkPurple,
+            // FILTERED TOTAL (if not showing all)
+            if (!_isLoading && _selectedFilter != 'All' && _filteredTransactions.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: _selectedFilter == 'Income'
+                          ? [const Color(0xFFE8F5E9), const Color(0xFFC8E6C9)]
+                          : [const Color(0xFFFFEBEE), const Color(0xFFFFCDD2)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (_selectedFilter == 'Income' 
+                            ? const Color(0xFF4CAF50) 
+                            : const Color(0xFFEF5350)).withOpacity(0.2),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Total $_selectedFilter',
+                            style: TextStyle(
+                              color: _selectedFilter == 'Income'
+                                  ? const Color(0xFF2E7D32)
+                                  : const Color(0xFFC62828),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            currencyFormat.format(_calculateTotal()),
+                            style: TextStyle(
+                              color: _selectedFilter == 'Income'
+                                  ? const Color(0xFF1B5E20)
+                                  : const Color(0xFFB71C1C),
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(
+                          _selectedFilter == 'Income'
+                              ? Icons.arrow_downward_rounded
+                              : Icons.arrow_upward_rounded,
+                          color: _selectedFilter == 'Income'
+                              ? const Color(0xFF4CAF50)
+                              : const Color(0xFFEF5350),
+                          size: 32,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ),
 
-          // TRANSACTION LIST OR LOADING/EMPTY STATE
-          _isLoading
-              ? const SliverFillRemaining(
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primaryPink,
+            // TRANSACTION LIST HEADER
+            if (!_isLoading && _filteredTransactions.isNotEmpty)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(24, 16, 24, 8),
+                  child: Text(
+                    'Transactions',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.darkPurple,
                     ),
                   ),
-                )
-              : _filteredTransactions.isEmpty
-                  ? SliverFillRemaining(child: _buildModernEmptyState())
-                  : SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final transaction = _filteredTransactions[index];
-                          final bool showDateHeader = index == 0 ||
-                              !_isSameDay(
-                                transaction.date,
-                                _filteredTransactions[index - 1].date,
-                              );
+                ),
+              ),
 
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (showDateHeader)
-                                _buildModernDateHeader(transaction.date),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 4,
-                                ),
-                                child: TransactionItem(transaction: transaction),
-                              ),
-                            ],
-                          );
-                        },
-                        childCount: _filteredTransactions.length,
+            // TRANSACTION LIST OR LOADING/EMPTY STATE
+            _isLoading
+                ? const SliverFillRemaining(
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primaryPink,
                       ),
                     ),
+                  )
+                : _filteredTransactions.isEmpty
+                    ? SliverFillRemaining(child: _buildModernEmptyState())
+                    : SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final transaction = _filteredTransactions[index];
+                            final bool showDateHeader = index == 0 ||
+                                !_isSameDay(
+                                  transaction.date,
+                                  _filteredTransactions[index - 1].date,
+                                );
 
-          const SliverToBoxAdapter(child: SizedBox(height: 100)),
-        ],
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (showDateHeader)
+                                  _buildModernDateHeader(transaction.date),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 4,
+                                  ),
+                                  child: TransactionItem(transaction: transaction),
+                                ),
+                              ],
+                            );
+                          },
+                          childCount: _filteredTransactions.length,
+                        ),
+                      ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        ),
       ),
     );
   }
@@ -375,7 +383,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.15),
+            color: color.withOpacity(0.15),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -387,7 +395,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 24),
@@ -433,7 +441,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: AppColors.primaryPink.withValues(alpha: 0.3),
+                      color: AppColors.primaryPink.withOpacity(0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
@@ -488,10 +496,10 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
       margin: const EdgeInsets.fromLTRB(24, 20, 24, 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: color.withValues(alpha: 0.3),
+          color: color.withOpacity(0.3),
           width: 1,
         ),
       ),
@@ -512,10 +520,6 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
         ],
       ),
     );
-  }
-
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   Widget _buildModernEmptyState() {
@@ -553,8 +557,8 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  color.withValues(alpha: 0.1),
-                  color.withValues(alpha: 0.05),
+                  color.withOpacity(0.1),
+                  color.withOpacity(0.05),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -562,7 +566,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: color.withValues(alpha: 0.2),
+                  color: color.withOpacity(0.2),
                   blurRadius: 30,
                   offset: const Offset(0, 15),
                 ),
@@ -571,7 +575,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
             child: Icon(
               icon,
               size: 80,
-              color: color.withValues(alpha: 0.6),
+              color: color.withOpacity(0.6),
             ),
           ),
           const SizedBox(height: 32),
@@ -593,29 +597,6 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
                 color: AppColors.greyText,
                 fontSize: 15,
                 height: 1.5,
-              ),
-            ),
-          ),
-          const SizedBox(height: 32),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primaryPink.withValues(alpha: 0.3),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: const Text(
-              'Get Started',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
               ),
             ),
           ),

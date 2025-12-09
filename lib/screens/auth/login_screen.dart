@@ -4,6 +4,7 @@ import '../../config/colors.dart';
 import '../../services/auth_service.dart';
 import '../root/main_screen.dart';
 import 'register_screen.dart';
+import '../../widgets/pinky_popup.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -54,8 +55,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 
   void _login() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      _showSnackBar('Email dan Password harus diisi', isError: true);
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {    
+      PinkyPopUp.show(
+        context,
+        type: PopUpType.error,
+        title: "Ups!",
+        message: "Email dan Password tidak boleh kosong ya.",
+      );
       return;
     }
 
@@ -67,7 +73,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         password: _passwordController.text.trim(),
       );
 
-      if (mounted) {
+      if (mounted) {        
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const MainScreen()),
@@ -75,27 +81,25 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       }
     } on AuthException catch (e) {
       if (mounted) {
-        _showSnackBar(e.message, isError: true);
+        PinkyPopUp.show(
+          context,
+          type: PopUpType.error,
+          title: "Login Gagal",
+          message: e.message, // Pesan error dari Supabase
+        );
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar('Terjadi kesalahan login', isError: true);
+        PinkyPopUp.show(
+          context,
+          type: PopUpType.error,
+          title: "Error",
+          message: "Terjadi kesalahan koneksi. Coba lagi nanti.",
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : AppColors.lightGreen,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
   }
 
   @override
@@ -107,9 +111,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFFFFF0F8), // Light pink
-              Color(0xFFFFFFFF), // White
-              Color(0xFFF0F8FF), // Light blue
+              Color(0xFFFFF0F8),
+              Color(0xFFFFFFFF),
+              Color(0xFFF0F8FF),
             ],
           ),
         ),
@@ -134,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             children: [
                               const SizedBox(height: 40),
                               
-                              // Logo with gradient container
+                              // [4] LOGO UTAMA (Ganti Icon dengan Image)
                               Hero(
                                 tag: 'logo',
                                 child: Container(
@@ -150,17 +154,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                       ),
                                     ],
                                   ),
-                                  child: const Icon(
-                                    Icons.wallet_rounded,
-                                    size: 60,
-                                    color: Colors.white,
+                                  child: Image.asset(
+                                    'assets/images/logo.png', // Logo File
+                                    width: 60,
+                                    height: 60,
+                                    color: Colors.white, // Tint Putih agar kontras dengan background Pink
+                                    fit: BoxFit.contain,
                                   ),
                                 ),
                               ),
                               
                               const SizedBox(height: 24),
                               
-                              // Title
                               const Text(
                                 'Pinky Pay',
                                 style: TextStyle(
@@ -174,7 +179,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               const SizedBox(height: 8),
                               
                               Text(
-                                'Welcome back! 💖',
+                                'Welcome back! Please login to your account',
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: AppColors.greyText,
@@ -184,7 +189,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               
                               const SizedBox(height: 48),
                               
-                              // Email Field
                               _buildTextField(
                                 controller: _emailController,
                                 label: 'Email',
@@ -194,7 +198,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               
                               const SizedBox(height: 16),
                               
-                              // Password Field
                               _buildTextField(
                                 controller: _passwordController,
                                 label: 'Password',
@@ -204,12 +207,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               
                               const SizedBox(height: 12),
                               
-                              // Forgot Password
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
                                   onPressed: () {
-                                    _showSnackBar('Fitur lupa password segera hadir!');
+                                     PinkyPopUp.show(
+                                      context,
+                                      type: PopUpType.info,
+                                      title: "Lupa Password?",
+                                      message: "Fitur reset password akan segera hadir!",
+                                    );
                                   },
                                   child: const Text(
                                     'Lupa Password?',
@@ -223,12 +230,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               
                               const SizedBox(height: 24),
                               
-                              // Login Button
                               _buildLoginButton(),
                               
                               const SizedBox(height: 24),
                               
-                              // Divider
                               Row(
                                 children: [
                                   Expanded(
@@ -258,7 +263,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               
                               const SizedBox(height: 24),
                               
-                              // Register Button
                               _buildRegisterButton(),
                               
                               const SizedBox(height: 40),

@@ -13,16 +13,19 @@ class UserModel {
     required this.email,
     required this.balance,
     this.avatarUrl = '',
-    DateTime? createdAt, // ← TAMBAHKAN INI
-  }) : createdAt = createdAt ?? DateTime.now(); // ← TAMBAHKAN INI
+    DateTime? createdAt,
+    this.pin,
+  }) : createdAt = createdAt ?? DateTime.now();
 
+  // CopyWith untuk update state
   UserModel copyWith({
     String? id,
     String? name,
     String? email,
     double? balance,
     String? avatarUrl,
-    DateTime? createdAt, // ← TAMBAHKAN INI
+    DateTime? createdAt,
+    String? pin, 
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -30,31 +33,36 @@ class UserModel {
       email: email ?? this.email,
       balance: balance ?? this.balance,
       avatarUrl: avatarUrl ?? this.avatarUrl,
-      createdAt: createdAt ?? this.createdAt, // ← TAMBAHKAN INI
+      createdAt: createdAt ?? this.createdAt,
+      pin: pin ?? this.pin, 
     );
   }
 
+  // ToJson untuk kirim ke Database
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'name': name,
+      'name': name, // Pastikan di DB kolomnya 'full_name' atau 'name' sesuai setup
       'email': email,
       'balance': balance,
-      'avatarUrl': avatarUrl,
-      'created_at': createdAt.toIso8601String(), // ← TAMBAHKAN INI
+      'avatar_url': avatarUrl, 
+      'created_at': createdAt.toIso8601String(),
+      'pin': pin, 
     };
   }
 
+  // FromJson untuk ambil dari Database
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id: json['id'],
-      name: json['full_name'] ?? json['name'] ?? 'No Name', // ← PERBAIKI INI (sesuaikan dengan DB column)
+      id: json['id'] ?? '', // Tambah fallback biar ga crash kalau null
+      name: json['full_name'] ?? json['name'] ?? 'No Name', 
       email: json['email'] ?? '',
-      balance: (json['balance'] ?? 0).toDouble(),
-      avatarUrl: json['avatar_url'] ?? '', // ← PERBAIKI INI (sesuaikan dengan DB column)
-      createdAt: json['created_at'] != null  // ← TAMBAHKAN INI
-          ? DateTime.parse(json['created_at'])
+      balance: (json['balance'] ?? 0).toDouble(),     
+      avatarUrl: json['avatar_url'] ?? json['avatarUrl'] ?? '', 
+      createdAt: json['created_at'] != null 
+          ? DateTime.parse(json['created_at']) 
           : DateTime.now(),
+      pin: json['pin'], 
     );
   }
 }

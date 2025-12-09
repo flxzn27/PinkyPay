@@ -1,11 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/colors.dart';
 import '../../models/transaction_model.dart';
 import '../../models/user_model.dart';
 import '../../services/transaction_service.dart';
+// [1] IMPORT SERVICE & WIDGET BARU
+import '../../services/notification_service.dart';
+import '../../widgets/pinky_popup.dart';
+import '../profile/create_pin_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
   final double currentBalance;
@@ -36,7 +41,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
   
   // Service & Loading State
   final TransactionService _service = TransactionService();
+  final NotificationService _notifService = NotificationService(); // [2] Service Notif
   final SupabaseClient _supabase = Supabase.instance.client;
+  
   bool _isLoading = false;
   Timer? _debounce;
 
@@ -47,6 +54,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (widget.initialRecipientEmail != null) {
       _recipientController.text = widget.initialRecipientEmail!;
     }
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _recipientController.dispose();
+    _noteController.dispose();
+    _debounce?.cancel();
+    super.dispose();
   }
 
   // Fungsi Pencarian User (Untuk Autocomplete)
@@ -63,46 +79,135 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return (response as List).map((e) => UserModel.fromJson(e)).toList();
   }
 
-  Future<void> _processPayment() async {
+  // [LOGIKA UTAMA] Validasi Input & Cek PIN
+  Future<void> _validateAndProcess() async {
     // 1. Validasi Input Dasar
     if (_recipientController.text.isEmpty) {
-      _showErrorSnackBar('Mau kirim ke siapa? Isi email dulu ya! 📧');
+      PinkyPopUp.show(context, type: PopUpType.warning, title: "Email Kosong", message: "Mau kirim ke siapa? Isi email dulu ya!");
       return;
     }
 
-    // Hilangkan karakter non-angka (Rp, titik, dll)
     final cleanAmount = _amountController.text.replaceAll(RegExp(r'[^0-9]'), '');
     if (cleanAmount.isEmpty) {
-      _showErrorSnackBar('Mau kirim berapa? Isi nominalnya dong 💸');
+      PinkyPopUp.show(context, type: PopUpType.warning, title: "Nominal Kosong", message: "Isi dulu mau kirim berapa.");
       return;
     }
 
     final amount = double.tryParse(cleanAmount);
-    
-    // 2. Validasi Nominal
     if (amount == null || amount < 1000) {
-      _showErrorSnackBar('Minimal transfer Rp 1.000 ya 😉');
+      PinkyPopUp.show(context, type: PopUpType.warning, title: "Kurang Banyak", message: "Minimal transfer Rp 1.000 ya.");
       return;
     }
 
-    // 3. Validasi Saldo Cukup
     if (amount > widget.currentBalance) {
-      _showErrorSnackBar('Waduh, saldo kamu nggak cukup nih 🙈');
+      PinkyPopUp.show(context, type: PopUpType.error, title: "Saldo Kurang", message: "Waduh, saldo kamu nggak cukup nih.");
       return;
     }
 
-    // 4. Proses Transaksi
     setState(() => _isLoading = true);
 
     try {
-      // Panggil Service Transfer Supabase
+      // 2. Cek PIN User di Database
+      final userId = _supabase.auth.currentUser!.id;
+      final userData = await _supabase.from('profiles').select('pin').eq('id', userId).single();
+      final String? userPin = userData['pin'];
+
+      setState(() => _isLoading = false);
+
+      // 3. Logika Percabangan PIN
+      if (userPin == null || userPin.isEmpty) {
+        _showCreatePinDialog();
+      } else {
+        _showEnterPinDialog(userPin, amount);
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      PinkyPopUp.show(context, type: PopUpType.error, title: "Error", message: "Gagal mengecek data user.");
+    }
+  }
+
+  void _showCreatePinDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text("PIN Belum Ada"),
+        content: const Text("Kamu wajib punya PIN untuk transfer uang. Yuk buat dulu!"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const CreatePinScreen()));
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink),
+            child: const Text("Buat PIN", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEnterPinDialog(String correctPin, double amount) {
+    final pinController = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Masukkan PIN", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Konfirmasi transfer kamu.", textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 20),
+            TextField(
+              controller: pinController,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              textAlign: TextAlign.center,
+              maxLength: 6,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8, color: AppColors.darkPurple),
+              decoration: InputDecoration(
+                counterText: "",
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal", style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            onPressed: () {
+              if (pinController.text == correctPin) {
+                Navigator.pop(context);
+                _processPayment(amount); // EKSEKUSI TRANSFER
+              } else {
+                Navigator.pop(context);
+                PinkyPopUp.show(context, type: PopUpType.error, title: "PIN Salah", message: "PIN tidak cocok. Transaksi dibatalkan.");
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink),
+            child: const Text("Kirim", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _processPayment(double amount) async {
+    setState(() => _isLoading = true);
+
+    try {
+      // 1. Panggil Service Transfer
       await _service.transfer(
         recipientEmail: _recipientController.text.trim(),
         amount: amount,
         note: _noteController.text,
       );
 
-      // Buat model transaksi lokal
+      // 2. Buat Model Transaksi Lokal
       final transaction = TransactionModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         type: TransactionType.payment,
@@ -115,104 +220,40 @@ class _PaymentScreenState extends State<PaymentScreen> {
         isIncome: false,
       );
 
-      // Update Saldo & History Lokal
+      // 3. Callback ke Home
       widget.onPayment(amount, false);
       widget.onAddTransaction(transaction);
 
+      // 4. Kirim Notifikasi Realtime
+      await _notifService.createNotification(
+        title: "Transfer Terkirim 💸",
+        message: "Kamu berhasil mengirim Rp ${NumberFormat.currency(locale: 'id_ID', symbol: '', decimalDigits: 0).format(amount)} ke ${_recipientController.text}",
+        type: "transaction",
+      );
+
+      // 5. Maskot Sukses
       if (mounted) {
-        _showSuccessDialog(amount);
+        PinkyPopUp.show(
+          context,
+          type: PopUpType.success,
+          title: "Transfer Berhasil!",
+          message: "Uang berhasil dikirim ke tujuan.",
+          btnText: "Selesai",
+          onPressed: () => Navigator.pop(context),
+        );
       }
     } catch (e) {
       String errorMessage = e.toString();
-      // Translate Error Supabase yang umum
-      if (errorMessage.contains('Penerima tidak ditemukan') || errorMessage.contains('Row not found')) {
-        errorMessage = 'Email penerima tidak terdaftar di PinkyPay 🧐';
-      } else if (errorMessage.contains('Saldo tidak mencukupi')) {
-        errorMessage = 'Saldo kurang, top up dulu yuk!';
-      } else if (errorMessage.contains('diri sendiri')) {
-        errorMessage = 'Jangan kirim ke diri sendiri dong 😆';
+      if (errorMessage.contains('Penerima tidak ditemukan')) {
+        errorMessage = 'Email penerima tidak terdaftar.';
       }
       
       if (mounted) {
-        _showErrorSnackBar(errorMessage);
+        PinkyPopUp.show(context, type: PopUpType.error, title: "Gagal Kirim", message: errorMessage);
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  void _showSuccessDialog(double amount) {
-    showModalBottomSheet(
-      context: context,
-      isDismissible: false,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.lightGreen.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check_rounded, color: Colors.green, size: 48),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Transfer Berhasil!',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Uang sudah terkirim ke',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-            ),
-            Text(
-              _recipientController.text,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(amount),
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primaryPink),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context); // Tutup Sheet
-                  Navigator.pop(context); // Kembali ke Home
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryPink,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                child: const Text('Selesai', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -298,9 +339,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   if (textEditingValue.text == '') {
                     return const Iterable<UserModel>.empty();
                   }
-                  // Debounce search (tunggu 500ms biar ga spam request)
-                  // Note: Di implementasi simple ini kita panggil langsung, 
-                  // untuk performa tinggi gunakan rxdart debounce
                   return _searchUsers(textEditingValue.text);
                 },
                 displayStringForOption: (UserModel option) => option.email,
@@ -308,10 +346,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   _recipientController.text = selection.email;
                 },
                 fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
-                  // Bind controller lokal ke controller Autocomplete
-                  // Agar kita bisa ambil value-nya saat tombol kirim ditekan
+                  // Sinkronisasi controller lokal
                   if (_recipientController.text.isEmpty && controller.text.isNotEmpty) {
-                     _recipientController.text = controller.text;
+                      _recipientController.text = controller.text;
                   }
                   controller.addListener(() {
                     _recipientController.text = controller.text;
@@ -338,7 +375,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       borderRadius: BorderRadius.circular(16),
                       color: Colors.white,
                       child: Container(
-                        width: MediaQuery.of(context).size.width - 48, // Sesuaikan lebar
+                        width: MediaQuery.of(context).size.width - 48, 
                         constraints: const BoxConstraints(maxHeight: 200),
                         child: ListView.builder(
                           padding: EdgeInsets.zero,
@@ -432,7 +469,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: _isLoading ? null : _processPayment,
+                // Panggil Validasi PIN Dulu
+                onPressed: _isLoading ? null : _validateAndProcess,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryPink,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -455,14 +493,5 @@ class _PaymentScreenState extends State<PaymentScreen> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    _recipientController.dispose();
-    _noteController.dispose();
-    _debounce?.cancel();
-    super.dispose();
   }
 }

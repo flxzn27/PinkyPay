@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import '../../config/colors.dart';
 import '../../models/user_model.dart';
+import '../../services/notification_service.dart'; // Import Notification Service
 
 class ChatScreen extends StatefulWidget {
   final UserModel friend;
@@ -15,21 +16,31 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController(); // Kontrol Scroll
+  final ScrollController _scrollController = ScrollController();
   final SupabaseClient _supabase = Supabase.instance.client;
+  final NotificationService _notifService = NotificationService();
+  
   late final String _myId;
   bool _isSending = false;
 
   @override
   void initState() {
     super.initState();
-    _myId = _supabase.auth.currentUser!.id;
+    // [UPDATE] Initialize ID safely here
+    final currentUser = _supabase.auth.currentUser;
+    if (currentUser != null) {
+      _myId = currentUser.id;
+    } else {
+      // Fallback if user is somehow logged out
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pop(context); 
+      });
+      _myId = ''; 
+    }
   }
 
-  // Fungsi Scroll Otomatis ke Bawah
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
-      // Beri sedikit delay agar widget selesai dirender dulu
       Future.delayed(const Duration(milliseconds: 100), () {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
@@ -44,7 +55,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
-    setState(() => _isSending = true); // Ubah icon jadi loading
+    setState(() => _isSending = true);
     _messageController.clear();
 
     try {
@@ -53,7 +64,17 @@ class _ChatScreenState extends State<ChatScreen> {
         'receiver_id': widget.friend.id,
         'content': text,
       });
-      // Sukses kirim, scroll ke bawah
+
+      // Send a push notification to the friend
+      final myName = _supabase.auth.currentUser?.userMetadata?['full_name'] ?? 'Temanmu';
+      
+      await _notifService.sendNotificationToUser(
+        targetUserId: widget.friend.id,
+        title: "Pesan Baru dari $myName 💬",
+        message: text,
+        type: "info",
+      );
+
       _scrollToBottom();
     } catch (e) {
       if (mounted) {
@@ -79,14 +100,12 @@ class _ChatScreenState extends State<ChatScreen> {
                    (sender == widget.friend.id && receiver == _myId);
           }).toList();
           
-          // Trigger scroll setiap kali data baru masuk (realtime)
           if (filtered.isNotEmpty) _scrollToBottom();
           
           return filtered;
         });
   }
 
-  // Helper untuk format tanggal header
   String _formatDateHeader(DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -148,7 +167,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   style: const TextStyle(color: AppColors.darkPurple, fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const Text(
-                  "Online", // Nanti bisa dikembangkan jadi 'Typing...' atau 'Last seen'
+                  "Online", 
                   style: TextStyle(color: Colors.green, fontSize: 12),
                 ),
               ],
@@ -158,7 +177,7 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.more_vert_rounded, color: Colors.grey),
-            onPressed: () {}, // Menu opsi tambahan (Block, Clear Chat, dll)
+            onPressed: () {},
           ),
         ],
       ),
@@ -209,7 +228,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     final isMe = msg['sender_id'] == _myId;
                     final date = DateTime.parse(msg['created_at']).toLocal();
                     
-                    // Logic untuk Header Tanggal
                     bool showHeader = false;
                     if (index == 0) {
                       showHeader = true;
@@ -246,9 +264,9 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
 
-          // INPUT AREA MODERN
+          // INPUT AREA
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24), // Extra padding bottom for iOS safe area style
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
@@ -256,15 +274,13 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             ),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end, // Agar icon tetap di bawah jika multiline
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Tombol Attachment (Hiasan)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10, right: 8),
                   child: Icon(Icons.add_circle_outline_rounded, color: Colors.grey[400], size: 28),
                 ),
                 
-                // Text Field
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
@@ -274,7 +290,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: TextField(
                       controller: _messageController,
                       minLines: 1,
-                      maxLines: 5, // Bisa expand sampai 5 baris
+                      maxLines: 5,
                       style: const TextStyle(color: AppColors.darkPurple),
                       decoration: InputDecoration(
                         hintText: "Tulis pesan...",
@@ -287,7 +303,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 const SizedBox(width: 12),
                 
-                // Tombol Kirim
                 GestureDetector(
                   onTap: _isSending ? null : _sendMessage,
                   child: Container(
@@ -330,7 +345,6 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          // Gradient untuk pesan sendiri, Putih untuk pesan teman
           gradient: isMe 
               ? const LinearGradient(colors: [AppColors.primaryPink, Color(0xFFFF4081)]) 
               : null,
@@ -338,7 +352,7 @@ class _ChatScreenState extends State<ChatScreen> {
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),
-            bottomLeft: Radius.circular(isMe ? 20 : 4), // Sudut lancip indikator pengirim
+            bottomLeft: Radius.circular(isMe ? 20 : 4),
             bottomRight: Radius.circular(isMe ? 4 : 20),
           ),
           boxShadow: [
@@ -351,7 +365,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisSize: MainAxisSize.min, // Agar bubble menyesuaikan panjang teks
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               text,

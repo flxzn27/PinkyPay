@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/colors.dart';
 import '../../services/auth_service.dart';
 import '../tabs/home_screen.dart';
+import '../../widgets/pinky_popup.dart'; // [1] Import Pop Up
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -56,20 +57,36 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   }
 
   void _register() async {
+    // Validasi Form
     if (_nameController.text.isEmpty || 
         _emailController.text.isEmpty || 
         _passwordController.text.isEmpty) {
-      _showSnackBar('Mohon isi semua data', isError: true);
+      PinkyPopUp.show(
+        context,
+        type: PopUpType.warning,
+        title: "Data Belum Lengkap",
+        message: "Mohon isi Nama, Email, dan Password kamu ya!",
+      );
       return;
     }
 
     if (!_agreedToTerms) {
-      _showSnackBar('Mohon setujui syarat dan ketentuan', isError: true);
+      PinkyPopUp.show(
+        context,
+        type: PopUpType.info,
+        title: "Syarat & Ketentuan",
+        message: "Kamu harus menyetujui Syarat & Ketentuan untuk melanjutkan.",
+      );
       return;
     }
 
     if (_passwordController.text.length < 6) {
-      _showSnackBar('Password minimal 6 karakter', isError: true);
+      PinkyPopUp.show(
+        context,
+        type: PopUpType.warning,
+        title: "Password Lemah",
+        message: "Password minimal 6 karakter demi keamanan akunmu.",
+      );
       return;
     }
 
@@ -83,34 +100,42 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
       );
 
       if (mounted) {
-        Navigator.pushReplacement(
+        // SUKSES REGISTER! Tampilkan Pop Up Sukses dulu
+        PinkyPopUp.show(
           context,
-          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+          type: PopUpType.success,
+          title: "Akun Berhasil Dibuat!",
+          message: "Selamat datang di Pinky Pay! Yuk mulai transaksi.",
+          btnText: "Mulai",
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const DashboardScreen()),
+            );
+          },
         );
       }
     } on AuthException catch (e) {
       if (mounted) {
-        _showSnackBar(e.message, isError: true);
+        PinkyPopUp.show(
+          context,
+          type: PopUpType.error,
+          title: "Registrasi Gagal",
+          message: e.message,
+        );
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar('Terjadi kesalahan pendaftaran', isError: true);
+        PinkyPopUp.show(
+          context,
+          type: PopUpType.error,
+          title: "Error",
+          message: "Terjadi kesalahan sistem. Coba lagi nanti.",
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : AppColors.lightGreen,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
   }
 
   @override
@@ -122,9 +147,9 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFFFFF0F8), // Light pink
-              Color(0xFFFFFFFF), // White
-              Color(0xFFF0F8FF), // Light blue
+              Color(0xFFFFF0F8),
+              Color(0xFFFFFFFF),
+              Color(0xFFF0F8FF),
             ],
           ),
         ),
@@ -174,7 +199,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                               
                               const SizedBox(height: 24),
                               
-                              // Logo
+                              // [LOGI DIGANTI DISINI JUGA]
                               Hero(
                                 tag: 'logo',
                                 child: Container(
@@ -190,17 +215,18 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                       ),
                                     ],
                                   ),
-                                  child: const Icon(
-                                    Icons.wallet_rounded,
-                                    size: 50,
+                                  child: Image.asset(
+                                    'assets/images/logo.png',
+                                    width: 50,
+                                    height: 50,
                                     color: Colors.white,
+                                    fit: BoxFit.contain,
                                   ),
                                 ),
                               ),
                               
                               const SizedBox(height: 24),
                               
-                              // Title
                               const Text(
                                 'Create Account',
                                 style: TextStyle(
@@ -214,7 +240,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                               const SizedBox(height: 8),
                               
                               Text(
-                                'Start your financial journey 🚀',
+                                'Start your financial journey with PinkyPay',
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: AppColors.greyText,
@@ -224,7 +250,6 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                               
                               const SizedBox(height: 40),
                               
-                              // Full Name Field
                               _buildTextField(
                                 controller: _nameController,
                                 label: 'Full Name',
@@ -233,7 +258,6 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                               
                               const SizedBox(height: 16),
                               
-                              // Email Field
                               _buildTextField(
                                 controller: _emailController,
                                 label: 'Email',
@@ -243,7 +267,6 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                               
                               const SizedBox(height: 16),
                               
-                              // Password Field
                               _buildTextField(
                                 controller: _passwordController,
                                 label: 'Password',
@@ -253,7 +276,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                               
                               const SizedBox(height: 20),
                               
-                              // Terms & Conditions Checkbox
+                              // Terms Checkbox
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
@@ -312,12 +335,10 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                               
                               const SizedBox(height: 32),
                               
-                              // Register Button
                               _buildRegisterButton(),
                               
                               const SizedBox(height: 24),
                               
-                              // Login Link
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [

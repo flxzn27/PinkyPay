@@ -208,7 +208,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
         slivers: [
           // MODERN APP BAR WITH PROFILE HEADER
           SliverAppBar(
-            expandedHeight: 340,
+            expandedHeight: 340, // Sedikit diperbesar agar lega
             floating: false,
             pinned: true,
             backgroundColor: AppColors.primaryPink,
@@ -559,6 +559,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       subtitle: 'Secure your account',
                       color: AppColors.lightBlue,
                       onTap: () {
+                        // [NAVIGASI BARU] Ke Change PIN Screen
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePinScreen()));
                       },
                     ),
@@ -632,6 +633,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       subtitle: 'Get help and support',
                       color: const Color(0xFF4CAF50),
                       onTap: () {
+                        // Navigasi ke Help Center
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const HelpCenterScreen()));
                       },
                     ),
@@ -642,6 +644,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       subtitle: 'Learn more about us',
                       color: AppColors.lightBlue,
                       onTap: () {
+                        // Navigasi ke About
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutAppScreen()));
                       },
                     ),
@@ -652,6 +655,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       subtitle: 'Read our policies',
                       color: AppColors.darkPurple,
                       onTap: () {
+                        // Navigasi ke Terms
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const TermsScreen()));
                       },
                     ),

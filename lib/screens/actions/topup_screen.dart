@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; 
 import '../../config/colors.dart';
 import '../../models/transaction_model.dart';
 import '../../services/transaction_service.dart';
+import '../../services/notification_service.dart';
+import '../../widgets/pinky_popup.dart';
+import '../profile/create_pin_screen.dart';
 
 class TopUpScreen extends StatefulWidget {
   final Function(double, bool) onTopUp;
@@ -22,10 +26,12 @@ class TopUpScreen extends StatefulWidget {
 class _TopUpScreenState extends State<TopUpScreen> {
   final TextEditingController _amountController = TextEditingController();
   final TransactionService _service = TransactionService();
+  final NotificationService _notifService = NotificationService();
+  final _supabase = Supabase.instance.client; // Instance Supabase
+  
   bool _isLoading = false;
   int _selectedBankIndex = -1;
 
-  // Data Dummy Bank (Bisa diganti asset image nanti)
   final List<Map<String, dynamic>> _banks = [
     {'name': 'BCA', 'color': const Color(0xFF005EB8)},
     {'name': 'Mandiri', 'color': const Color(0xFF003D79)},
@@ -39,34 +45,141 @@ class _TopUpScreenState extends State<TopUpScreen> {
 
   void _selectQuickAmount(double amount) {
     _amountController.text = amount.toStringAsFixed(0);
-    HapticFeedback.lightImpact(); // Efek getar halus
+    HapticFeedback.lightImpact();
   }
 
-  Future<void> _processTopUp() async {
+  // [LOGIKA UTAMA] Cek PIN User & Validasi Input
+  Future<void> _checkPinAndProcess() async {
+    // 1. Validasi Input Dasar
     if (_selectedBankIndex == -1) {
-      _showErrorSnackBar('Pilih Bank dulu ya! 🏦');
+      PinkyPopUp.show(context, type: PopUpType.warning, title: "Pilih Bank", message: "Pilih bank dulu ya biar tau mau transfer kemana.");
       return;
     }
 
     final amountText = _amountController.text.replaceAll(RegExp(r'[^0-9]'), '');
     if (amountText.isEmpty) {
-      _showErrorSnackBar('Masukan nominal Top Up 💸');
+      PinkyPopUp.show(context, type: PopUpType.warning, title: "Nominal Kosong", message: "Isi dulu mau top up berapa.");
       return;
     }
 
     final amount = double.tryParse(amountText);
     if (amount == null || amount < 10000) {
-      _showErrorSnackBar('Minimal Top Up Rp 10.000 ya 😉');
+      PinkyPopUp.show(context, type: PopUpType.warning, title: "Kurang Banyak", message: "Minimal Top Up Rp 10.000 ya.");
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
+      // 2. Ambil Data User Terbaru dari Database (Cek PIN)
+      final userId = _supabase.auth.currentUser!.id;
+      final userData = await _supabase.from('profiles').select('pin').eq('id', userId).single();
+      
+      final String? userPin = userData['pin'];
+
+      setState(() => _isLoading = false);
+
+      // 3. Logika Percabangan PIN
+      if (userPin == null || userPin.isEmpty) {
+        // KASUS A: Belum punya PIN -> Paksa Buat PIN
+        _showCreatePinDialog();
+      } else {
+        // KASUS B: Sudah punya PIN -> Minta Masukkan PIN
+        _showEnterPinDialog(userPin, amount);
+      }
+
+    } catch (e) {
+      setState(() => _isLoading = false);
+      PinkyPopUp.show(context, type: PopUpType.error, title: "Error", message: "Gagal mengecek data user.");
+    }
+  }
+
+  // Dialog A: Arahkan ke Create PIN
+  void _showCreatePinDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("PIN Belum Ada", style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text("Kamu belum mengatur PIN transaksi. Yuk buat dulu demi keamanan!"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal", style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context); // Tutup dialog
+              // Pindah ke halaman Create PIN
+              Navigator.push(
+                context, 
+                MaterialPageRoute(builder: (_) => const CreatePinScreen())
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink),
+            child: const Text("Buat PIN", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Dialog B: Input PIN untuk Validasi
+  void _showEnterPinDialog(String correctPin, double amount) {
+    final pinController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Masukkan PIN", textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Konfirmasi transaksi dengan PIN kamu.", textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 20),
+            TextField(
+              controller: pinController,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              textAlign: TextAlign.center,
+              maxLength: 6,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8, color: AppColors.darkPurple),
+              decoration: InputDecoration(
+                counterText: "",
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal", style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            onPressed: () {
+              // 4. Cek Kecocokan PIN
+              if (pinController.text == correctPin) {
+                Navigator.pop(context); // Tutup dialog
+                _processTopUp(amount);  // EKSEKUSI TRANSAKSI
+              } else {
+                Navigator.pop(context);
+                PinkyPopUp.show(context, type: PopUpType.error, title: "PIN Salah!", message: "PIN yang kamu masukkan tidak cocok.");
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink),
+            child: const Text("Konfirmasi", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _processTopUp(double amount) async {
+    setState(() => _isLoading = true);
+
+    try {
       final selectedBankName = _banks[_selectedBankIndex]['name'];
       
-      // Simulasi delay jaringan biar UX terasa "memproses"
-      await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(const Duration(seconds: 1)); // Simulasi loading
       await _service.topUp(amount, selectedBankName);
 
       final transaction = TransactionModel(
@@ -81,82 +194,30 @@ class _TopUpScreenState extends State<TopUpScreen> {
       widget.onTopUp(amount, true);
       widget.onAddTransaction(transaction);
 
+      // Notifikasi Realtime
+      await _notifService.createNotification(
+        title: "Top Up Berhasil! 💰",
+        message: "Saldo Rp ${NumberFormat.currency(locale: 'id_ID', symbol: '', decimalDigits: 0).format(amount)} berhasil masuk via $selectedBankName.",
+        type: "transaction",
+      );
+
       if (mounted) {
-        _showSuccessDialog(amount, selectedBankName);
+        PinkyPopUp.show(
+          context,
+          type: PopUpType.rich, // Maskot kaya
+          title: "Top Up Berhasil!",
+          message: "Yey! Saldo kamu nambah nih. Jangan lupa jajan ya!",
+          btnText: "Siap!",
+          onPressed: () => Navigator.pop(context),
+        );
       }
     } catch (e) {
-      if (mounted) _showErrorSnackBar('Ups, Top Up gagal: $e');
+      if (mounted) {
+        PinkyPopUp.show(context, type: PopUpType.error, title: "Gagal Top Up", message: "Terjadi kesalahan sistem: $e");
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  void _showSuccessDialog(double amount, String bankName) {
-    showModalBottomSheet(
-      context: context,
-      isDismissible: false,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 64),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Top Up Berhasil!',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Saldo kamu sudah bertambah',
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(amount),
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context); // Tutup Sheet
-                  Navigator.pop(context); // Kembali ke Home
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryPink,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                child: const Text("Mantap! 👍", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -183,13 +244,8 @@ class _TopUpScreenState extends State<TopUpScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 20),
-                    const Text(
-                      "Pilih Sumber Dana",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
-                    ),
+                    const Text("Pilih Sumber Dana", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
                     const SizedBox(height: 16),
-                    
-                    // GRID BANK SELECTOR
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -213,53 +269,26 @@ class _TopUpScreenState extends State<TopUpScreen> {
                             decoration: BoxDecoration(
                               color: isSelected ? AppColors.primaryPink.withOpacity(0.05) : Colors.white,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isSelected ? AppColors.primaryPink : Colors.grey[200]!,
-                                width: isSelected ? 2 : 1,
-                              ),
+                              border: Border.all(color: isSelected ? AppColors.primaryPink : Colors.grey[200]!, width: isSelected ? 2 : 1),
                             ),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // Logo Bank Placeholder (Circle Color)
-                                Container(
-                                  width: 12,
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    color: bank['color'],
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
+                                Container(width: 12, height: 12, decoration: BoxDecoration(color: bank['color'], shape: BoxShape.circle)),
                                 const SizedBox(height: 8),
-                                Text(
-                                  bank['name'],
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: isSelected ? AppColors.primaryPink : AppColors.darkPurple,
-                                  ),
-                                ),
+                                Text(bank['name'], style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? AppColors.primaryPink : AppColors.darkPurple)),
                               ],
                             ),
                           ),
                         );
                       },
                     ),
-
                     const SizedBox(height: 40),
-                    
-                    const Text(
-                      "Masukan Nominal",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
-                    ),
+                    const Text("Masukan Nominal", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
                     const SizedBox(height: 12),
-                    
-                    // INPUT NOMINAL RAKSASA
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8F9FD),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                      decoration: BoxDecoration(color: const Color(0xFFF8F9FD), borderRadius: BorderRadius.circular(20)),
                       child: Row(
                         children: [
                           const Text("Rp", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.greyText)),
@@ -269,20 +298,13 @@ class _TopUpScreenState extends State<TopUpScreen> {
                               controller: _amountController,
                               keyboardType: TextInputType.number,
                               style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
-                              decoration: const InputDecoration(
-                                hintText: "0",
-                                border: InputBorder.none,
-                                isDense: true,
-                              ),
+                              decoration: const InputDecoration(hintText: "0", border: InputBorder.none, isDense: true),
                             ),
                           ),
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // QUICK CHIPS
                     Wrap(
                       spacing: 12,
                       runSpacing: 12,
@@ -291,15 +313,8 @@ class _TopUpScreenState extends State<TopUpScreen> {
                           onTap: () => _selectQuickAmount(amount),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: Text(
-                              NumberFormat.compact(locale: 'id_ID').format(amount),
-                              style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.darkPurple),
-                            ),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey[300]!)),
+                            child: Text(NumberFormat.compact(locale: 'id_ID').format(amount), style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.darkPurple)),
                           ),
                         );
                       }).toList(),
@@ -308,29 +323,17 @@ class _TopUpScreenState extends State<TopUpScreen> {
                 ),
               ),
             ),
-
-            // BOTTOM BUTTON
             Container(
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5)),
-                ],
-              ),
+              decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))]),
               child: SizedBox(
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _processTopUp,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryPink,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 0,
-                  ),
-                  child: _isLoading 
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
-                      : const Text("Top Up Sekarang", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  // Panggil fungsi cek PIN, bukan langsung top up
+                  onPressed: _isLoading ? null : _checkPinAndProcess,
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
+                  child: _isLoading ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)) : const Text("Top Up Sekarang", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),
             ),

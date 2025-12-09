@@ -14,8 +14,10 @@ class PinkyPayBottomNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Menghapus tinggi tetap (height: 85) pada Container, 
+    // dan membungkus BottomNavigationBar dengan Padding di dalam SafeArea.
     return Container(
-      height: 85, // Navbar height
+      padding: const EdgeInsets.only(top: 8.0), // Padding di atas bar
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: const BorderRadius.only(
@@ -24,76 +26,84 @@ class PinkyPayBottomNavigation extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
+            color: Colors.black.withOpacity(0.08), // Shadow dibuat lebih lembut
+            blurRadius: 25,
             offset: const Offset(0, -5),
           ),
         ],
       ),
-      child: BottomNavigationBar(
-        currentIndex: currentIndex,
-        onTap: onTap,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        selectedItemColor: AppColors.primaryPink,
-        unselectedItemColor: AppColors.greyText,
-        showUnselectedLabels: true,
-        selectedLabelStyle: GoogleFonts.poppins(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
-        unselectedLabelStyle: GoogleFonts.poppins(
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-        ),
-        items: [
-          _buildNavItem(Icons.home_rounded, 'Home'),
-          _buildNavItem(Icons.receipt_long_rounded, 'Activity'),
-          
-          // Center Button (PAY / SCAN)
-          BottomNavigationBarItem(
-            icon: Container(
-              width: 52,
-              height: 52,
-              margin: const EdgeInsets.only(bottom: 6),
-              decoration: BoxDecoration(
-                gradient: AppColors.primaryGradient,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primaryPink.withOpacity(0.4),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.qr_code_scanner_rounded,
-                color: Colors.white,
-                size: 26,
-              ),
-            ),
-            label: 'Scan',
+      // Kita gunakan SafeArea agar BottomNavigationBar tidak terpotong 
+      // oleh gesture bar di bagian bawah layar.
+      child: SafeArea( 
+        top: false, // Jangan tambahkan padding di bagian atas
+        child: BottomNavigationBar(
+          currentIndex: currentIndex,
+          onTap: onTap,
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          selectedItemColor: AppColors.primaryPink,
+          unselectedItemColor: AppColors.greyText,
+          showUnselectedLabels: true,
+          selectedLabelStyle: GoogleFonts.poppins(
+            fontSize: 11,
+            fontWeight: FontWeight.w700, // Dibuat lebih tebal saat terpilih
           ),
-          
-          _buildNavItem(Icons.account_balance_wallet_rounded, 'Wallet'),
-          _buildNavItem(Icons.person_rounded, 'Profile'),
-        ],
+          unselectedLabelStyle: GoogleFonts.poppins(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+          items: [
+            _buildNavItem(0, Icons.home_rounded, 'Home', currentIndex),
+            _buildNavItem(1, Icons.receipt_long_rounded, 'Activity', currentIndex),
+            
+            // Center Button (PAY / SCAN)
+            BottomNavigationBarItem(
+              icon: Container(
+                width: 52,
+                height: 52,
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryPink.withOpacity(0.4),
+                      blurRadius: 15,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: Colors.white,
+                  size: 26,
+                ),
+              ),
+              label: 'Scan',
+            ),
+            
+            _buildNavItem(3, Icons.account_balance_wallet_rounded, 'Wallet', currentIndex),
+            _buildNavItem(4, Icons.person_rounded, 'Profile', currentIndex),
+          ],
+        ),
       ),
     );
   }
 
-  BottomNavigationBarItem _buildNavItem(IconData icon, String label) {
+  // Menyesuaikan _buildNavItem untuk memberikan visual yang berbeda saat aktif
+  BottomNavigationBarItem _buildNavItem(int index, IconData icon, String label, int currentIndex) {
+    bool isSelected = index == currentIndex;
     return BottomNavigationBarItem(
       icon: Container(
         margin: const EdgeInsets.only(bottom: 4),
-        child: Icon(icon, size: 26),
+        child: Icon(
+          icon, 
+          size: isSelected ? 28 : 26, // Dibuat sedikit lebih besar saat aktif
+          color: isSelected ? AppColors.primaryPink : AppColors.greyText,
+        ),
       ),
-      activeIcon: Container(
-        margin: const EdgeInsets.only(bottom: 4),
-        child: Icon(icon, size: 26),
-      ),
+      // activeIcon tidak perlu di-override karena warna sudah diatur di selectedItemColor
       label: label,
     );
   }
