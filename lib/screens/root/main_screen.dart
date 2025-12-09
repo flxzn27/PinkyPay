@@ -3,9 +3,9 @@ import '../../config/colors.dart';
 import '../../widgets/bottom_navigation.dart';
 import '../tabs/home_screen.dart';
 import '../tabs/activity_screen.dart';
-import '../tabs/wallet_screen.dart';
 import '../tabs/profile_screen.dart';
-import '../actions/scan_qr_screen.dart'; // Pastikan import ini ada
+import '../actions/scan_qr_screen.dart';
+import '../actions/friend_screen.dart'; 
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -22,7 +22,7 @@ class _MainScreenState extends State<MainScreen> {
     const DashboardScreen(), // Index 0
     const ActivityScreen(),  // Index 1
     const SizedBox(),        // Index 2 (Placeholder kosong untuk Scan)
-    const WalletScreen(),    // Index 3
+    const FriendScreen(),    // Index 3 [GANTI] Wallet menjadi FriendScreen
     const ProfileScreen(),   // Index 4
   ];
 

@@ -13,6 +13,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // [PERBAIKAN 1] Mengaktifkan Core Library Desugaring agar plugin notifikasi jalan
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -41,4 +43,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+// [PERBAIKAN 2] Menambahkan dependency library Desugaring
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }

@@ -35,10 +35,10 @@ class _FriendScreenState extends State<FriendScreen> {
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.darkPurple),
-            onPressed: () => Navigator.pop(context),
-          ),
+          // [PERUBAHAN PENTING] 
+          // Hapus leading (tombol back) dan set otomatis false
+          automaticallyImplyLeading: false, 
+          
           centerTitle: true,
           title: const Text(
             "Pinky Circle",

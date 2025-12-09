@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/colors.dart';
 
 class ChangePinScreen extends StatefulWidget {
@@ -12,9 +13,11 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
   final _oldPinController = TextEditingController();
   final _newPinController = TextEditingController();
   final _confirmPinController = TextEditingController();
+  final _supabase = Supabase.instance.client;
+  bool _isLoading = false;
 
-  void _savePin() {
-    // Validasi Sederhana
+  Future<void> _savePin() async {
+    // 1. Validasi Input
     if (_newPinController.text.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PIN must be 6 digits")));
       return;
@@ -24,10 +27,50 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
       return;
     }
 
-    // TODO: Panggil API Supabase untuk update PIN di sini
-    
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PIN Changed Successfully! 🔒")));
-    Navigator.pop(context);
+    setState(() => _isLoading = true);
+
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+
+      // 2. Ambil PIN Lama dari Database untuk verifikasi
+      final data = await _supabase
+          .from('profiles')
+          .select('pin')
+          .eq('id', user.id)
+          .single();
+      
+      final currentDbPin = data['pin'] as String?;
+
+      // Jika user sudah punya PIN, cek apakah PIN lama cocok
+      if (currentDbPin != null && currentDbPin.isNotEmpty) {
+        if (_oldPinController.text != currentDbPin) {
+           if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Incorrect Current PIN ❌"), backgroundColor: Colors.red));
+            setState(() => _isLoading = false);
+           }
+           return;
+        }
+      }
+
+      // 3. Update PIN Baru ke Database
+      await _supabase.from('profiles').update({
+        'pin': _newPinController.text,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', user.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PIN Changed Successfully! 🔒")));
+        Navigator.pop(context);
+      }
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -56,12 +99,14 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: _savePin,
+                onPressed: _isLoading ? null : _savePin,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.darkPurple,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text("Update PIN", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                child: _isLoading 
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text("Update PIN", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               ),
             ),
           ],

@@ -21,7 +21,10 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProviderStateMixin {
   final _supabase = Supabase.instance.client;
   UserModel? user;
+  
   bool _isLoading = true;
+  
+  // State untuk Switch (Default values)
   bool _biometricEnabled = false;
   bool _notificationsEnabled = true;
   
@@ -60,11 +63,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     super.dispose();
   }
 
+  // --- 1. FETCH DATA PROFILE & SETTINGS ---
   Future<void> _fetchUserProfile() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
 
+      // Ambil data Profile DAN kolom setting sekaligus
       final data = await _supabase
           .from('profiles')
           .select()
@@ -73,13 +78,38 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
       if (mounted) {
         setState(() {
+          // Parse data user (Nama, Email, Avatar, dll)
           user = UserModel.fromJson(data);
+          
+          // [BARU] Parse status setting dari Database
+          // Pastikan kolom ini ada di DB atau handle null-nya
+          _biometricEnabled = data['biometric_enabled'] ?? false;
+          _notificationsEnabled = data['notification_push'] ?? true;
+          
           _isLoading = false;
         });
       }
     } catch (e) {
       debugPrint('Error loading profile: $e');
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- 2. UPDATE SETTING LANGSUNG KE DB ---
+  Future<void> _updateSetting(String column, bool value) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+      
+      // Kirim update ke Supabase
+      await _supabase.from('profiles').update({column: value}).eq('id', userId);
+    } catch (e) {
+      debugPrint("Gagal update setting $column: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Gagal menyimpan perubahan: $e"), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -261,6 +291,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                               child: CircleAvatar(
                                 radius: 58,
                                 backgroundColor: Colors.white,
+                                // [FIXED] Tampilkan Avatar dari DB (URL)
                                 backgroundImage: user?.avatarUrl != null && user!.avatarUrl.isNotEmpty
                                     ? NetworkImage(user!.avatarUrl)
                                     : null,
@@ -375,9 +406,12 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 ),
                 child: IconButton(
                   icon: const Icon(Icons.settings_rounded, color: Colors.white),
-                  onPressed: () {
+                  onPressed: () async {
                     // Direct ke Settings Screen
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                    // Kita tunggu return valuenya juga, siapa tahu user ubah setting disana
+                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                    // Refresh data saat kembali
+                    _fetchUserProfile();
                   },
                 ),
               ),
@@ -544,12 +578,18 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       subtitle: 'Update your personal information',
                       color: AppColors.primaryPink,
                       onTap: () async {
-                        // Navigasi ke Edit Profile & Refresh data jika ada update
+                        // [FIXED] Panggil Edit Profile dan REFRESH jika ada perubahan
+                        if (user == null) return;
+                        
                         final result = await Navigator.push(
                           context, 
                           MaterialPageRoute(builder: (_) => EditProfileScreen(user: user!))
                         );
-                        if (result == true) _fetchUserProfile();
+                        
+                        // Jika result == true, artinya user menekan tombol Save di halaman edit
+                        if (result == true) {
+                           _fetchUserProfile(); // Refresh data user di halaman ini
+                        }
                       },
                     ),
                     _buildDivider(),
@@ -573,6 +613,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       switchValue: _biometricEnabled,
                       onSwitchChanged: (val) {
                         setState(() => _biometricEnabled = val);
+                        _updateSetting('biometric_enabled', val); // SIMPAN KE DB
                         if(val) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Biometric Activated!")));
                       },
                     ),
@@ -586,6 +627,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                       switchValue: _notificationsEnabled,
                       onSwitchChanged: (val) {
                         setState(() => _notificationsEnabled = val);
+                        _updateSetting('notification_push', val); // SIMPAN KE DB
                       },
                     ),
                   ],
@@ -723,7 +765,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Made with 💖 in Indonesia',
+                    'Made with Love in Purbalingga',
                     style: TextStyle(
                       color: AppColors.greyText,
                       fontSize: 11,
