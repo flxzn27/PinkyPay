@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/colors.dart';
 import '../../services/auth_service.dart';
-import '../tabs/home_screen.dart';
-import '../../widgets/pinky_popup.dart'; // [1] Import Pop Up
+import 'login_screen.dart'; // [1] Ganti import Home menjadi Login
+import '../../widgets/pinky_popup.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -17,9 +17,11 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
   final _authService = AuthService();
+  
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _agreedToTerms = false;
+  
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -100,17 +102,19 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
       );
 
       if (mounted) {
-        // SUKSES REGISTER! Tampilkan Pop Up Sukses dulu
+        // [2] SUKSES REGISTER! Arahkan ke Login Screen
         PinkyPopUp.show(
           context,
           type: PopUpType.success,
-          title: "Akun Berhasil Dibuat!",
-          message: "Selamat datang di Pinky Pay! Yuk mulai transaksi.",
-          btnText: "Mulai",
+          title: "Registrasi Berhasil!",
+          // Ubah pesan agar sesuai alur (instruksi login)
+          message: "Akunmu berhasil dibuat. Silakan login menggunakan email dan password barumu.",
+          btnText: "Login Sekarang",
           onPressed: () {
+            // Navigasi ke LoginScreen
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => const DashboardScreen()),
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
             );
           },
         );
@@ -183,7 +187,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     borderRadius: BorderRadius.circular(12),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.1),
+                                        color: Colors.black.withOpacity(0.1),
                                         blurRadius: 10,
                                         offset: const Offset(0, 5),
                                       ),
@@ -199,7 +203,6 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                               
                               const SizedBox(height: 24),
                               
-                              // [LOGI DIGANTI DISINI JUGA]
                               Hero(
                                 tag: 'logo',
                                 child: Container(
@@ -209,7 +212,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                     shape: BoxShape.circle,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: AppColors.primaryPink.withValues(alpha: 0.4),
+                                        color: AppColors.primaryPink.withOpacity(0.4),
                                         blurRadius: 20,
                                         offset: const Offset(0, 10),
                                       ),
@@ -284,7 +287,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: AppColors.primaryPink.withValues(alpha: 0.05),
+                                      color: AppColors.primaryPink.withOpacity(0.05),
                                       blurRadius: 10,
                                       offset: const Offset(0, 5),
                                     ),
@@ -397,7 +400,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryPink.withValues(alpha: 0.1),
+            color: AppColors.primaryPink.withOpacity(0.1),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -454,7 +457,7 @@ class _RegisterScreenState extends State<RegisterScreen> with SingleTickerProvid
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryPink.withValues(alpha: 0.4),
+            color: AppColors.primaryPink.withOpacity(0.4),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),

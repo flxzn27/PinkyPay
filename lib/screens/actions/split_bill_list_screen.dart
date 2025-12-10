@@ -6,6 +6,7 @@ import '../../services/transaction_service.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/pinky_popup.dart';
 import '../profile/create_pin_screen.dart';
+import '../root/main_screen.dart'; // [1] Import MainScreen
 
 class SplitBillListScreen extends StatefulWidget {
   const SplitBillListScreen({super.key});
@@ -36,9 +37,7 @@ class _SplitBillListScreenState extends State<SplitBillListScreen> {
       return;
     }
 
-    // [PENTING] Cek apakah kolom pin di DB namanya 'pin' atau 'pin_code'
-    // Sesuaikan string di bawah ini dengan database kamu
-    final String? userPin = myProfile['pin'] ?? myProfile['pin_code']; 
+    final String? userPin = myProfile['pin']; // Sesuaikan jika nama kolom 'pin_code'
     
     if (userPin == null || userPin.isEmpty) {
       _showCreatePinDialog();
@@ -105,8 +104,19 @@ class _SplitBillListScreenState extends State<SplitBillListScreen> {
 
       if (mounted) {
         PinkyPopUp.show(
-          context, type: PopUpType.success, title: "Lunas!", message: "Hutang kamu ke $payerName sudah dibayar.",
-          onPressed: () => setState(() {}),
+          context, 
+          type: PopUpType.success, 
+          title: "Lunas!", 
+          message: "Hutang kamu ke $payerName sudah dibayar.",
+          btnText: "Kembali ke Home", // [2] Ubah tombol
+          onPressed: () {
+            // [3] NAVIGASI KE MAIN SCREEN
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const MainScreen()),
+              (route) => false, 
+            );
+          },
         );
       }
     } catch (e) {
@@ -160,9 +170,8 @@ class _SplitBillListScreenState extends State<SplitBillListScreen> {
                   itemBuilder: (context, index) {
                     final req = requests[index];
                     
-                    // ✅ PERBAIKAN UTAMA: Handle Data Payer dengan 'full_name'
                     final payer = req['payer'] ?? {};
-                    final payerName = payer['full_name'] ?? payer['name'] ?? 'Unknown'; // Prioritaskan full_name
+                    final payerName = payer['full_name'] ?? payer['name'] ?? 'Unknown'; 
                     final payerAvatar = payer['avatar_url'];
                     
                     final amount = (req['amount'] ?? 0).toDouble();
@@ -193,7 +202,6 @@ class _SplitBillListScreenState extends State<SplitBillListScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // Tampilkan Nama yang benar
                                     Text("Ditagih oleh $payerName", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
                                     Text(DateFormat('dd MMM HH:mm').format(date), style: TextStyle(fontSize: 12, color: Colors.grey[500])),
                                   ],

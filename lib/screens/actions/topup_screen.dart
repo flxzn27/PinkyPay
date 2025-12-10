@@ -8,6 +8,7 @@ import '../../services/transaction_service.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/pinky_popup.dart';
 import '../profile/create_pin_screen.dart';
+import '../root/main_screen.dart'; // [PENTING] Import ini agar bisa kembali ke MainScreen
 
 class TopUpScreen extends StatefulWidget {
   final Function(double, bool) onTopUp;
@@ -27,7 +28,7 @@ class _TopUpScreenState extends State<TopUpScreen> {
   final TextEditingController _amountController = TextEditingController();
   final TransactionService _service = TransactionService();
   final NotificationService _notifService = NotificationService();
-  final _supabase = Supabase.instance.client; // Instance Supabase
+  final _supabase = Supabase.instance.client;
   
   bool _isLoading = false;
   int _selectedBankIndex = -1;
@@ -48,9 +49,8 @@ class _TopUpScreenState extends State<TopUpScreen> {
     HapticFeedback.lightImpact();
   }
 
-  // [LOGIKA UTAMA] Cek PIN User & Validasi Input
+  // Cek PIN
   Future<void> _checkPinAndProcess() async {
-    // 1. Validasi Input Dasar
     if (_selectedBankIndex == -1) {
       PinkyPopUp.show(context, type: PopUpType.warning, title: "Pilih Bank", message: "Pilih bank dulu ya biar tau mau transfer kemana.");
       return;
@@ -71,20 +71,15 @@ class _TopUpScreenState extends State<TopUpScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 2. Ambil Data User Terbaru dari Database (Cek PIN)
       final userId = _supabase.auth.currentUser!.id;
       final userData = await _supabase.from('profiles').select('pin').eq('id', userId).single();
-      
       final String? userPin = userData['pin'];
 
       setState(() => _isLoading = false);
 
-      // 3. Logika Percabangan PIN
       if (userPin == null || userPin.isEmpty) {
-        // KASUS A: Belum punya PIN -> Paksa Buat PIN
         _showCreatePinDialog();
       } else {
-        // KASUS B: Sudah punya PIN -> Minta Masukkan PIN
         _showEnterPinDialog(userPin, amount);
       }
 
@@ -94,7 +89,6 @@ class _TopUpScreenState extends State<TopUpScreen> {
     }
   }
 
-  // Dialog A: Arahkan ke Create PIN
   void _showCreatePinDialog() {
     showDialog(
       context: context,
@@ -107,8 +101,7 @@ class _TopUpScreenState extends State<TopUpScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal", style: TextStyle(color: Colors.grey))),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context); // Tutup dialog
-              // Pindah ke halaman Create PIN
+              Navigator.pop(context);
               Navigator.push(
                 context, 
                 MaterialPageRoute(builder: (_) => const CreatePinScreen())
@@ -122,7 +115,6 @@ class _TopUpScreenState extends State<TopUpScreen> {
     );
   }
 
-  // Dialog B: Input PIN untuk Validasi
   void _showEnterPinDialog(String correctPin, double amount) {
     final pinController = TextEditingController();
     
@@ -156,10 +148,9 @@ class _TopUpScreenState extends State<TopUpScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal", style: TextStyle(color: Colors.grey))),
           ElevatedButton(
             onPressed: () {
-              // 4. Cek Kecocokan PIN
               if (pinController.text == correctPin) {
-                Navigator.pop(context); // Tutup dialog
-                _processTopUp(amount);  // EKSEKUSI TRANSAKSI
+                Navigator.pop(context);
+                _processTopUp(amount); 
               } else {
                 Navigator.pop(context);
                 PinkyPopUp.show(context, type: PopUpType.error, title: "PIN Salah!", message: "PIN yang kamu masukkan tidak cocok.");
@@ -180,6 +171,8 @@ class _TopUpScreenState extends State<TopUpScreen> {
       final selectedBankName = _banks[_selectedBankIndex]['name'];
       
       await Future.delayed(const Duration(seconds: 1)); // Simulasi loading
+      
+      // Proses Top Up ke Service (Kode lama Anda tetap digunakan)
       await _service.topUp(amount, selectedBankName);
 
       final transaction = TransactionModel(
@@ -191,6 +184,7 @@ class _TopUpScreenState extends State<TopUpScreen> {
         isIncome: true,
       );
 
+      // Callback tetap dijalankan
       widget.onTopUp(amount, true);
       widget.onAddTransaction(transaction);
 
@@ -207,8 +201,17 @@ class _TopUpScreenState extends State<TopUpScreen> {
           type: PopUpType.rich, // Maskot kaya
           title: "Top Up Berhasil!",
           message: "Yey! Saldo kamu nambah nih. Jangan lupa jajan ya!",
-          btnText: "Siap!",
-          onPressed: () => Navigator.pop(context),
+          btnText: "Kembali ke Home", // [MODIFIKASI] Ubah teks tombol
+          onPressed: () {
+            // [MODIFIKASI] Navigasi Reset ke MainScreen
+            // Ini akan menghapus halaman TopUp dan kembali ke Root
+            // MainScreen akan otomatis reload dan mengambil saldo terbaru
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const MainScreen()),
+              (route) => false, 
+            );
+          },
         );
       }
     } catch (e) {
@@ -330,7 +333,6 @@ class _TopUpScreenState extends State<TopUpScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  // Panggil fungsi cek PIN, bukan langsung top up
                   onPressed: _isLoading ? null : _checkPinAndProcess,
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), elevation: 0),
                   child: _isLoading ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)) : const Text("Top Up Sekarang", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),

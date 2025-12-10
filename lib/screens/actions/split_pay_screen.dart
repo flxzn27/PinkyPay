@@ -7,10 +7,10 @@ import '../../models/user_model.dart';
 import '../../models/friend_model.dart';
 import '../../services/transaction_service.dart';
 import '../../services/friend_service.dart';
-// [1] IMPORT BARU
 import '../../services/notification_service.dart';
 import '../../widgets/pinky_popup.dart';
 import '../profile/create_pin_screen.dart';
+import '../root/main_screen.dart'; // [1] Import MainScreen
 
 class SplitPayScreen extends StatefulWidget {
   final double currentBalance;
@@ -38,7 +38,7 @@ class _SplitPayScreenState extends State<SplitPayScreen> {
   // Service
   final TransactionService _transactionService = TransactionService();
   final FriendService _friendService = FriendService();
-  final NotificationService _notifService = NotificationService(); // [2] Notif Service
+  final NotificationService _notifService = NotificationService();
   final SupabaseClient _supabase = Supabase.instance.client;
   
   bool _isLoading = false;
@@ -278,21 +278,20 @@ class _SplitPayScreenState extends State<SplitPayScreen> {
         );
 
         // B. Kirim Notifikasi ke HP Teman (Realtime!)
-        // Format Rupiah
         final formattedAmount = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(amountPerPerson);
         
         await _notifService.sendNotificationToUser(
           targetUserId: friend.id, // ID Teman
           title: "Tagihan Split Bill 🧾",
           message: "$myName menalangin $formattedAmount untuk '$note'. Yuk segera bayar!",
-          type: "promo", // Kita pakai ikon promo (oranye) atau info (biru) biar eye-catching
+          type: "promo", 
         );
       }
 
       // 3. Catat Transaksi Lokal (History User Sendiri)
       final transaction = TransactionModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        type: TransactionType.splitBill, // Gunakan Tipe Baru
+        type: TransactionType.splitBill, 
         amount: totalAmount, 
         description: "$note (with ${_selectedFriends.length} friends)",
         date: DateTime.now(),
@@ -316,8 +315,15 @@ class _SplitPayScreenState extends State<SplitPayScreen> {
           type: PopUpType.success,
           title: "Berhasil Dibayar!",
           message: "Tagihan sudah lunas. Teman-temanmu akan diberitahu.",
-          btnText: "Sip!",
-          onPressed: () => Navigator.pop(context),
+          btnText: "Kembali ke Home", // [2] Ubah Text
+          onPressed: () {
+            // [3] NAVIGASI RESET KE MAINSCREEN
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const MainScreen()),
+              (route) => false, 
+            );
+          },
         );
       }
     } catch (e) {

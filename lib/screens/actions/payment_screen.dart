@@ -7,10 +7,10 @@ import '../../config/colors.dart';
 import '../../models/transaction_model.dart';
 import '../../models/user_model.dart';
 import '../../services/transaction_service.dart';
-// [1] IMPORT SERVICE & WIDGET BARU
 import '../../services/notification_service.dart';
 import '../../widgets/pinky_popup.dart';
 import '../profile/create_pin_screen.dart';
+import '../root/main_screen.dart'; // [1] Import MainScreen untuk navigasi balik
 
 class PaymentScreen extends StatefulWidget {
   final double currentBalance;
@@ -41,7 +41,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   
   // Service & Loading State
   final TransactionService _service = TransactionService();
-  final NotificationService _notifService = NotificationService(); // [2] Service Notif
+  final NotificationService _notifService = NotificationService();
   final SupabaseClient _supabase = Supabase.instance.client;
   
   bool _isLoading = false;
@@ -238,14 +238,23 @@ class _PaymentScreenState extends State<PaymentScreen> {
           type: PopUpType.success,
           title: "Transfer Berhasil!",
           message: "Uang berhasil dikirim ke tujuan.",
-          btnText: "Selesai",
-          onPressed: () => Navigator.pop(context),
+          btnText: "Kembali ke Home", // [2] Ubah Teks Tombol
+          onPressed: () {
+            // [3] NAVIGASI LANGSUNG KE HOME (RESET STACK)
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const MainScreen()),
+              (route) => false, 
+            );
+          },
         );
       }
     } catch (e) {
       String errorMessage = e.toString();
       if (errorMessage.contains('Penerima tidak ditemukan')) {
         errorMessage = 'Email penerima tidak terdaftar.';
+      } else if (errorMessage.contains('Saldo tidak cukup')) {
+        errorMessage = 'Saldo kamu tidak cukup untuk melakukan transfer ini.';
       }
       
       if (mounted) {
