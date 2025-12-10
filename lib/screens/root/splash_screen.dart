@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../config/colors.dart';
-import 'main_screen.dart'; 
+import 'main_screen.dart';
 import '../auth/login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -61,12 +61,14 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
 
     final session = Supabase.instance.client.auth.currentSession;
-    
+
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => session != null ? const MainScreen() : const LoginScreen(),
-        transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
+        pageBuilder: (_, __, ___) =>
+            session != null ? const MainScreen() : const LoginScreen(),
+        transitionsBuilder: (_, a, __, c) =>
+            FadeTransition(opacity: a, child: c),
         transitionDuration: const Duration(milliseconds: 800),
       ),
     );
@@ -80,6 +82,12 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Responsive sizing berdasarkan screen height
+    final screenHeight = MediaQuery.of(context).size.height;
+    final logoSize = screenHeight * 0.18; // ~18% dari screen height
+    final mainFontSize = screenHeight * 0.045; // ~4.5% dari screen height
+    final subFontSize = screenHeight * 0.02; // ~2% dari screen height
+
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -101,30 +109,30 @@ class _SplashScreenState extends State<SplashScreen>
               return Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // --- LOGO BESAR (Tanpa Lingkaran) ---
+                  // --- LOGO (Optimized untuk layar besar) ---
                   ScaleTransition(
                     scale: _scaleAnimation,
                     child: FadeTransition(
                       opacity: _fadeAnimation,
                       child: Image.asset(
                         'assets/images/logo.png',
-                        width: 180, // ✅ Ukuran Diperbesar (Sesuaikan jika kurang besar)
-                        height: 180,
-                        fit: BoxFit.contain, // ✅ Menjaga proporsi agar tidak gepeng
-                        color: Colors.white, // ✅ Logo jadi Putih Bersih di atas Pink
+                        width: logoSize,
+                        height: logoSize,
+                        fit: BoxFit.contain,
+                        color: Colors.white,
                         errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
+                          return Icon(
                             Icons.account_balance_wallet_rounded,
-                            size: 100,
+                            size: logoSize * 0.8,
                             color: Colors.white,
                           );
                         },
                       ),
                     ),
                   ),
-                  
-                  const SizedBox(height: 20),
-                  
+
+                  SizedBox(height: screenHeight * 0.04), // Responsive spacing
+
                   // --- TEKS JUDUL ---
                   Transform.translate(
                     offset: Offset(0, _slideAnimation.value),
@@ -132,31 +140,31 @@ class _SplashScreenState extends State<SplashScreen>
                       opacity: _fadeAnimation,
                       child: Column(
                         children: [
-                          const Text(
+                          Text(
                             'Pinky Pay',
                             style: TextStyle(
-                              fontSize: 36, // Font diperbesar
-                              fontWeight: FontWeight.w900, // Lebih tebal
+                              fontSize: mainFontSize,
+                              fontWeight: FontWeight.w900,
                               color: Colors.white,
-                              letterSpacing: 2.0,
-                              fontFamily: 'Poppins', 
+                              letterSpacing: 1.5,
+                              fontFamily: 'Poppins',
                               shadows: [
                                 Shadow(
-                                  offset: Offset(0, 4),
+                                  offset: const Offset(0, 4),
                                   blurRadius: 10.0,
-                                  color: Colors.black26,
+                                  color: Colors.black.withOpacity(0.2),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          SizedBox(height: screenHeight * 0.015),
                           Text(
                             'Smart Way to Pay',
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: subFontSize,
                               fontWeight: FontWeight.w500,
-                              color: Colors.white.withOpacity(0.9),
-                              letterSpacing: 1.2,
+                              color: Colors.white.withOpacity(0.85),
+                              letterSpacing: 0.8,
                             ),
                           ),
                         ],

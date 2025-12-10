@@ -24,25 +24,24 @@ class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  // [PENTING] Tidak ada underscore agar bisa diakses MainScreen
   State<DashboardScreen> createState() => DashboardScreenState();
 }
 
-// [PENTING] Tidak ada underscore (Public Class)
-class DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
+class DashboardScreenState extends State<DashboardScreen>
+    with SingleTickerProviderStateMixin {
   // Data State
   UserModel? user;
   List<TransactionModel> transactions = [];
   bool _isLoading = true;
   bool _isBalanceVisible = true;
-  
+
   // Status Notifikasi (Realtime)
-  bool _hasUnreadNotifications = false; 
-  
+  bool _hasUnreadNotifications = false;
+
   // Animation
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-  
+
   // Dependencies
   final _supabase = Supabase.instance.client;
   final TransactionService _transactionService = TransactionService();
@@ -51,7 +50,7 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
   void initState() {
     super.initState();
     _initAnimation();
-    fetchUserData(); // Panggil fungsi public
+    fetchUserData();
   }
 
   void _initAnimation() {
@@ -71,18 +70,20 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
     super.dispose();
   }
 
-  // [PENTING] Public Function (Tanpa _) agar bisa dipanggil dari MainScreen
   Future<void> fetchUserData() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
 
-      // Request Data Profile, Transaksi, dan Cek Notifikasi secara paralel
       final results = await Future.wait<dynamic>([
         _supabase.from('profiles').select().eq('id', userId).maybeSingle(),
         _transactionService.getTransactions(),
-        // Hitung notifikasi yang belum dibaca
-        _supabase.from('notifications').select().eq('user_id', userId).eq('is_read', false).count(), 
+        _supabase
+            .from('notifications')
+            .select()
+            .eq('user_id', userId)
+            .eq('is_read', false)
+            .count(),
       ]);
 
       final profileData = results[0] as Map<String, dynamic>?;
@@ -99,16 +100,14 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
       }
 
       final transactionData = results[1] as List<TransactionModel>;
-      
-      // Hasil count notifikasi
-      final unreadCountResponse = results[2]; 
+      final unreadCountResponse = results[2];
       final bool hasNotif = (unreadCountResponse?.count ?? 0) > 0;
 
       if (mounted) {
         setState(() {
           user = UserModel.fromJson(profileData);
           transactions = transactionData;
-          _hasUnreadNotifications = hasNotif; // Update status dari database
+          _hasUnreadNotifications = hasNotif;
           _isLoading = false;
         });
       }
@@ -118,7 +117,6 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
     }
   }
 
-  // Greeting Otomatis
   String get _greeting {
     var hour = DateTime.now().hour;
     if (hour < 12) return 'Good Morning';
@@ -135,83 +133,95 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
     return '🌙';
   }
 
-  // [PENTING] Public Function (Tanpa _) agar bisa dipanggil dari ScanQrScreen via MainScreen
   void updateBalance(double amount, bool isIncome) {
     if (user == null) return;
     setState(() {
-      double newBalance = isIncome 
-          ? user!.balance + amount 
-          : user!.balance - amount;
+      double newBalance =
+          isIncome ? user!.balance + amount : user!.balance - amount;
       user = user!.copyWith(balance: newBalance);
     });
-    
+
     PinkyPopUp.show(
       context,
       type: PopUpType.success,
       title: "Berhasil!",
       message: isIncome ? "Saldo berhasil ditambahkan" : "Pembayaran berhasil",
     );
-    
-    fetchUserData(); 
+
+    fetchUserData();
   }
 
-  // [PENTING] Public Function (Tanpa _)
   void addTransaction(TransactionModel transaction) {
     fetchUserData();
   }
 
-  // Logic Pop Up Menu Split Bill
   void _showSplitBillOptions() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       backgroundColor: Colors.white,
       builder: (context) {
         return Container(
-          padding: const EdgeInsets.all(24),
-          height: 250,
+          padding:
+              const EdgeInsets.only(top: 24, left: 24, right: 24, bottom: 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Text("Menu Patungan (Split Bill)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+              const Text("Menu Patungan (Split Bill)",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.darkPurple)),
               const SizedBox(height: 24),
-              
-              // Opsi 1: Buat Tagihan Baru
               ListTile(
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => SplitPayScreen(
-                    currentBalance: user?.balance ?? 0, 
-                    onSplitPay: updateBalance, 
-                    onAddTransaction: addTransaction
-                  )));
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => SplitPayScreen(
+                              currentBalance: user?.balance ?? 0,
+                              onSplitPay: updateBalance,
+                              onAddTransaction: addTransaction)));
                 },
                 leading: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: AppColors.lightBlue.withOpacity(0.1), shape: BoxShape.circle),
-                  child: const Icon(Icons.add_rounded, color: AppColors.lightBlue),
+                  decoration: BoxDecoration(
+                      color: AppColors.lightBlue.withOpacity(0.1),
+                      shape: BoxShape.circle),
+                  child:
+                      const Icon(Icons.add_rounded, color: AppColors.lightBlue),
                 ),
-                title: const Text("Buat Tagihan Baru", style: TextStyle(fontWeight: FontWeight.bold)),
+                title: const Text("Buat Tagihan Baru",
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: const Text("Talangin teman-temanmu"),
-                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded,
+                    size: 16, color: Colors.grey),
               ),
-              
               const SizedBox(height: 8),
-
-              // Opsi 2: Lihat Tagihan Masuk
               ListTile(
                 onTap: () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SplitBillListScreen()));
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const SplitBillListScreen()));
                 },
                 leading: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), shape: BoxShape.circle),
-                  child: const Icon(Icons.receipt_long_rounded, color: Colors.orange),
+                  decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      shape: BoxShape.circle),
+                  child: const Icon(Icons.receipt_long_rounded,
+                      color: Colors.orange),
                 ),
-                title: const Text("Tagihan Masuk", style: TextStyle(fontWeight: FontWeight.bold)),
+                title: const Text("Tagihan Masuk",
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: const Text("Bayar hutang ke teman"),
-                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded,
+                    size: 16, color: Colors.grey),
               ),
             ],
           ),
@@ -235,7 +245,6 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
 
     return Scaffold(
       backgroundColor: AppColors.greyLight,
-      // FAB SUDAH DIHAPUS DARI SINI
       body: RefreshIndicator(
         onRefresh: fetchUserData,
         color: AppColors.primaryPink,
@@ -244,7 +253,8 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
           slivers: [
             // APP BAR
             SliverAppBar(
-              expandedHeight: 360, 
+              // [FIX UTAMA] Naikkan tinggi App Bar agar BalanceCard muat
+              expandedHeight: 420,
               floating: false,
               pinned: true,
               backgroundColor: AppColors.primaryPink,
@@ -292,10 +302,10 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                                   onTap: () async {
                                     await Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                                      MaterialPageRoute(
+                                          builder: (context) =>
+                                              const NotificationScreen()),
                                     );
-                                    
-                                    // Saat kembali, refresh data untuk update badge
                                     if (mounted) {
                                       fetchUserData();
                                     }
@@ -309,12 +319,8 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                                     child: Stack(
                                       clipBehavior: Clip.none,
                                       children: [
-                                        const Icon(
-                                          Icons.notifications_rounded, 
-                                          color: Colors.white, 
-                                          size: 26
-                                        ),
-                                        // Badge Merah (Hanya muncul jika ada notif baru)
+                                        const Icon(Icons.notifications_rounded,
+                                            color: Colors.white, size: 26),
                                         if (_hasUnreadNotifications)
                                           Positioned(
                                             right: 0,
@@ -323,13 +329,17 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                                               width: 10,
                                               height: 10,
                                               decoration: BoxDecoration(
-                                                color: Colors.redAccent,
-                                                shape: BoxShape.circle,
-                                                border: Border.all(color: AppColors.primaryPink, width: 1.5),
-                                                boxShadow: [
-                                                   const BoxShadow(color: Colors.black26, blurRadius: 2)
-                                                ]
-                                              ),
+                                                  color: Colors.redAccent,
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(
+                                                      color:
+                                                          AppColors.primaryPink,
+                                                      width: 1.5),
+                                                  boxShadow: [
+                                                    const BoxShadow(
+                                                        color: Colors.black26,
+                                                        blurRadius: 2)
+                                                  ]),
                                             ),
                                           )
                                       ],
@@ -338,9 +348,9 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                                 ),
                               ],
                             ),
-                            
+
                             const SizedBox(height: 24),
-                            
+
                             // Balance Card
                             BalanceCard(
                               balance: user?.balance ?? 0,
@@ -352,17 +362,25 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                               },
                               onTopUp: () {
                                 Navigator.push(
-                                  context, 
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => TopUpScreen(
+                                            onTopUp: updateBalance,
+                                            onAddTransaction: addTransaction)));
+                              },
+                              onTransfer: () {
+                                Navigator.push(
+                                  context,
                                   MaterialPageRoute(
-                                    builder: (_) => TopUpScreen(
-                                      onTopUp: updateBalance, 
-                                      onAddTransaction: addTransaction
-                                    )
-                                  )
+                                    builder: (_) => PaymentScreen(
+                                      currentBalance: user?.balance ?? 0,
+                                      onPayment: updateBalance,
+                                      onAddTransaction: addTransaction,
+                                    ),
+                                  ),
                                 );
                               },
                             ),
-
                           ],
                         ),
                       ),
@@ -375,7 +393,8 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
             // MENU QUICK ACTIONS
             SliverToBoxAdapter(
               child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                margin:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -393,7 +412,10 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                   children: [
                     const Text(
                       'Quick Actions',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkPurple),
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.darkPurple),
                     ),
                     const SizedBox(height: 20),
                     Row(
@@ -403,27 +425,39 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                           icon: Icons.add_circle_outline_rounded,
                           label: "Top Up",
                           color: AppColors.primaryPink,
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TopUpScreen(onTopUp: updateBalance, onAddTransaction: addTransaction))),
+                          onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => TopUpScreen(
+                                      onTopUp: updateBalance,
+                                      onAddTransaction: addTransaction))),
                         ),
                         _buildModernMenuItem(
                           icon: Icons.arrow_upward_rounded,
                           label: "Send",
                           color: AppColors.lightBlue,
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentScreen(currentBalance: user?.balance ?? 0, onPayment: updateBalance, onAddTransaction: addTransaction))),
+                          onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => PaymentScreen(
+                                      currentBalance: user?.balance ?? 0,
+                                      onPayment: updateBalance,
+                                      onAddTransaction: addTransaction))),
                         ),
-                        // ✅ SPLIT BILL (Panggil Menu Pilihan)
                         _buildModernMenuItem(
-                          icon: Icons.call_split_rounded, 
+                          icon: Icons.call_split_rounded,
                           label: "Split Bill",
                           color: AppColors.darkPurple,
-                          onTap: _showSplitBillOptions, 
+                          onTap: _showSplitBillOptions,
                         ),
-                        // ✅ ADD FRIEND
                         _buildModernMenuItem(
                           icon: Icons.person_add_rounded,
                           label: "Add Friend",
-                          color: const Color(0xFFFFB74D), 
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FriendScreen())),
+                          color: const Color(0xFFFFB74D),
+                          onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const FriendScreen())),
                         ),
                       ],
                     ),
@@ -453,20 +487,28 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                         color: AppColors.primaryPink.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: const Icon(Icons.card_giftcard_rounded, color: AppColors.primaryPink, size: 32),
+                      child: const Icon(Icons.card_giftcard_rounded,
+                          color: AppColors.primaryPink, size: 32),
                     ),
                     const SizedBox(width: 16),
                     const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Special Promo! 🎉', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
+                          Text('Special Promo! 🎉',
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.darkPurple)),
                           SizedBox(height: 4),
-                          Text('Get cashback up to 20%', style: TextStyle(fontSize: 12, color: AppColors.greyText)),
+                          Text('Get cashback up to 20%',
+                              style: TextStyle(
+                                  fontSize: 12, color: AppColors.greyText)),
                         ],
                       ),
                     ),
-                    const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.primaryPink, size: 20),
+                    const Icon(Icons.arrow_forward_ios_rounded,
+                        color: AppColors.primaryPink, size: 20),
                   ],
                 ),
               ),
@@ -479,8 +521,16 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Recent Transactions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkPurple)),
-                    Text('See All', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primaryPink)),
+                    Text('Recent Transactions',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.darkPurple)),
+                    Text('See All',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primaryPink)),
                   ],
                 ),
               ),
@@ -489,19 +539,30 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
             // TRANSACTION LIST
             transactions.isEmpty
                 ? SliverFillRemaining(
+                    hasScrollBody: false,
                     child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Container(
                             padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(color: AppColors.greyLight, shape: BoxShape.circle),
-                            child: Icon(Icons.receipt_long_rounded, size: 64, color: AppColors.greyText.withOpacity(0.5)),
+                            decoration: BoxDecoration(
+                                color: AppColors.greyLight,
+                                shape: BoxShape.circle),
+                            child: Icon(Icons.receipt_long_rounded,
+                                size: 64,
+                                color: AppColors.greyText.withOpacity(0.5)),
                           ),
                           const SizedBox(height: 16),
-                          const Text("No transactions yet", style: TextStyle(color: AppColors.greyText, fontSize: 16, fontWeight: FontWeight.w500)),
+                          const Text("No transactions yet",
+                              style: TextStyle(
+                                  color: AppColors.greyText,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500)),
                           const SizedBox(height: 8),
-                          const Text("Start your first transaction!", style: TextStyle(color: AppColors.greyText, fontSize: 14)),
+                          const Text("Start your first transaction!",
+                              style: TextStyle(
+                                  color: AppColors.greyText, fontSize: 14)),
                         ],
                       ),
                     ),
@@ -510,8 +571,10 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
                         return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-                          child: TransactionItem(transaction: transactions[index]),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 4),
+                          child:
+                              TransactionItem(transaction: transactions[index]),
                         );
                       },
                       childCount: transactions.length,
@@ -559,7 +622,10 @@ class DashboardScreenState extends State<DashboardScreen> with SingleTickerProvi
           const SizedBox(height: 10),
           Text(
             label,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.darkPurple),
+            style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.darkPurple),
           ),
         ],
       ),

@@ -95,18 +95,35 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
             const SizedBox(height: 16),
             _buildPinField("Confirm New PIN", _confirmPinController),
             const Spacer(),
+            
+            // [PERBAIKAN TOMBOL]
             SizedBox(
               width: double.infinity,
-              height: 50,
+              height: 54, // Tinggi diperbesar sedikit (50 -> 54) agar teks lebih lega
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _savePin,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.darkPurple,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  // Tambahkan padding vertikal agar teks tidak 'tenggelam'
+                  padding: const EdgeInsets.symmetric(vertical: 14), 
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 2, // Beri sedikit shadow agar tombol 'mengapung'
                 ),
                 child: _isLoading 
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text("Update PIN", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ? const SizedBox(
+                      width: 24, 
+                      height: 24, 
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)
+                    )
+                  : const Text(
+                      "Update PIN", 
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold, 
+                        fontSize: 16,
+                        color: Colors.white, // Pastikan teks putih
+                        letterSpacing: 0.5, // Sedikit jarak antar huruf
+                      )
+                    ),
               ),
             ),
           ],
@@ -124,6 +141,7 @@ class _ChangePinScreenState extends State<ChangePinScreen> {
       decoration: InputDecoration(
         labelText: label,
         counterText: "",
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16), // Padding input
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),

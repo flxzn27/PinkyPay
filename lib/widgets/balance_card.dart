@@ -6,7 +6,9 @@ class BalanceCard extends StatelessWidget {
   final double balance;
   final bool isVisible;
   final VoidCallback onToggleVisibility;
+  // Parameter TopUp dan Transfer dibuat opsional namun tetap ada
   final VoidCallback? onTopUp;
+  final VoidCallback? onTransfer;
 
   const BalanceCard({
     super.key,
@@ -14,6 +16,7 @@ class BalanceCard extends StatelessWidget {
     required this.isVisible,
     required this.onToggleVisibility,
     this.onTopUp,
+    this.onTransfer,
   });
 
   @override
@@ -26,12 +29,13 @@ class BalanceCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      height: 180, // Tinggi yang pas untuk header
+      // [FIX 1] Tinggi dihapus atau dibuat minHeight agar fleksibel
+      // height: 200,
       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30), // Radius lebih bulat (Modern)
-        
-        // [1] Shadow Lembut di bawah
+        borderRadius: BorderRadius.circular(30),
+
+        // [1] Shadow Lembut
         boxShadow: [
           BoxShadow(
             color: AppColors.primaryPink.withOpacity(0.3),
@@ -40,38 +44,46 @@ class BalanceCard extends StatelessWidget {
           ),
         ],
 
-        // [2] Background Image dari Canva (card.png)
+        // [2] Background Image
         image: const DecorationImage(
           image: AssetImage('assets/images/card.png'),
-          fit: BoxFit.cover, // Memenuhi seluruh kotak
+          fit: BoxFit.cover,
         ),
       ),
       child: Stack(
         children: [
-          // [3] Overlay Gradient Transparan (Agar teks putih terbaca jelas di background apapun)
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(30),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Colors.black.withOpacity(0.1), // Sedikit gelap di kiri atas
-                  Colors.transparent,
-                  Colors.black.withOpacity(0.2), // Sedikit gelap di kanan bawah
-                ],
+          // [3] Overlay Gradient Transparan
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(30),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.black.withOpacity(0.1),
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.2),
+                  ],
+                ),
               ),
             ),
           ),
 
           // [4] Konten Utama
           Padding(
-            padding: const EdgeInsets.all(28.0),
+            padding: const EdgeInsets.only(
+                top: 20,
+                left: 20,
+                right: 16,
+                bottom:
+                    20), // [FIX] Padding disesuaikan untuk menghilangkan overflow
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center, // Konten di tengah vertikal
+              mainAxisSize:
+                  MainAxisSize.min, // [FIX 3] Agar tinggi menyesuaikan isi
               children: [
-                // Label Kecil
+                // --- BAGIAN ATAS: Label & Icon ---
                 Row(
                   children: [
                     Container(
@@ -80,11 +92,8 @@ class BalanceCard extends StatelessWidget {
                         color: Colors.white.withOpacity(0.2),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                        Icons.account_balance_wallet_rounded, 
-                        color: Colors.white, 
-                        size: 14
-                      ),
+                      child: const Icon(Icons.account_balance_wallet_rounded,
+                          color: Colors.white, size: 14),
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -99,69 +108,108 @@ class BalanceCard extends StatelessWidget {
                   ],
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 20), // Jarak antar elemen
 
-                // Angka Saldo Besar
+                // --- BAGIAN TENGAH: Saldo Besar ---
+                // [FIX 4] Anti Overflow untuk Saldo
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Saldo
-                    Text(
-                      isVisible ? formatter.format(balance) : 'Rp •••••••',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 32, // Ukuran Font Besar
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.5, // Sedikit rapat biar modern
+                    // Saldo (Menggunakan Expanded & FittedBox)
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown, // Kecilkan font jika mentok
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          isVisible ? formatter.format(balance) : 'Rp •••••••',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 32, // Font besar
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
                       ),
                     ),
 
+                    const SizedBox(width: 8),
+
                     // Tombol Mata
-                    IconButton(
-                      onPressed: onToggleVisibility,
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white.withOpacity(0.2),
-                        padding: const EdgeInsets.all(12),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      icon: Icon(
-                        isVisible ? Icons.visibility_rounded : Icons.visibility_off_rounded,
-                        color: Colors.white,
-                        size: 20,
+                      child: IconButton(
+                        onPressed: onToggleVisibility,
+                        padding: const EdgeInsets.all(0),
+                        icon: Icon(
+                          isVisible
+                              ? Icons.visibility_rounded
+                              : Icons.visibility_off_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ],
                 ),
 
-                const Spacer(), // Dorong ke bawah
+                const SizedBox(height: 24), // Jarak ke footer
 
-                // Footer: Branding Kecil
+                // --- BAGIAN BAWAH: Status & Chip ---
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      "Pinky Pay Premium",
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 12,
-                        fontStyle: FontStyle.italic,
+                    // [FIX 5] Flexible untuk teks footer
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Pinky Pay Premium",
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
+                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          // Jika mau menampilkan nomor kartu, bisa uncomment ini
+                          // Text("**** 8899", style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12)),
+                        ],
                       ),
                     ),
-                    
-                    // Indikator Aktif (Dot Hijau)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withOpacity(0.2)),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.circle, color: Colors.lightGreenAccent, size: 8),
-                          SizedBox(width: 6),
-                          Text("Active", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                        ],
+
+                    const SizedBox(width: 8),
+
+                    // Indikator Aktif
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border:
+                              Border.all(color: Colors.white.withOpacity(0.2)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.circle,
+                                color: Colors.lightGreenAccent, size: 8),
+                            SizedBox(width: 4),
+                            Text("Active",
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       ),
                     )
                   ],

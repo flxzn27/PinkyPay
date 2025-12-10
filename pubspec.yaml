@@ -1,4 +1,4 @@
-name: pinkypay
+name: PinkyPay
 description: "A new Flutter project."
 publish_to: 'none'
 
@@ -21,13 +21,13 @@ dependencies:
   supabase_flutter: ^2.10.3
   
   # QR & Camera Features (BARU)
-  mobile_scanner: ^5.2.3  # Library scan QR yang stabil
-  qr_flutter: ^4.1.0      # Library untuk generate QR Code
+  mobile_scanner: ^5.2.3  
+  qr_flutter: ^4.1.0     
   image_picker: ^1.0.7
   pinput: ^6.0.1
 
   flutter_local_notifications: ^17.0.0
-  permission_handler: ^11.3.0 # Untuk minta izin notif
+  permission_handler: ^11.3.0 
   local_auth: ^2.1.0
 
 dev_dependencies:
@@ -35,6 +35,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
   flutter_native_splash: ^2.3.1
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
@@ -43,16 +44,18 @@ flutter:
     - assets/icons/
 
 flutter_native_splash:
-  color: "#FF00B7" 
-  image: assets/images/logo.png
-  
-  # Tambahkan ini agar logo tidak nempel ke pinggir (mencegah gepeng/terpotong)
-  branding: assets/images/logo.png 
-  color_dark: "#121212" 
-  image_dark: assets/images/logo.png
+  color: "#FFFFFF"
+  color_dark: "#FFFFFF"
 
   android_12:
-    image: assets/images/logo.png
-    color: "#FF00B7"
-    # icon_background_color membungkus logo dalam lingkaran agar rapi
+    color: "#FFFFFF"
     icon_background_color: "#FFFFFF"
+
+
+flutter_launcher_icons:
+  android: "ic_launcher" 
+  ios: true             
+  image_path: "assets/icons/app_icon.jpeg" 
+  min_sdk_android: 21   
+  adaptive_icon_background: "#FFFFFF"  
+  adaptive_icon_foreground: "assets/icons/app_icon.jpeg"    
